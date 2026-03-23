@@ -7,10 +7,9 @@ export interface CExPApi {
   identify: (identity: unknown) => void;
   reset: () => void;
   /**
-   * Optional internal helper.
-   * Not part of the public facade yet, but included for upcoming global-id plumbing.
+   * Returns an anonymous id for the current runtime.
    */
-  getAnonymousId?: () => string;
+  getAnonymousId: () => string;
   version: string;
 }
 

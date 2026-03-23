@@ -15,9 +15,16 @@ export const reset = CExP.reset;
 export const getAnonymousId = CExP.getAnonymousId;
 export const version = CExP.version;
 
-// Safe for ESM/SSR imports: only attach when a browser global is available.
-if (typeof window !== "undefined") {
-  (globalThis as unknown as { CExP?: typeof CExP }).CExP = CExP;
+// Only attach when loaded as a script in a browser-like environment.
+// In test runners (jsdom) we can have `window`, but `document.currentScript`
+// is typically null for module imports. This avoids polluting the test global.
+const shouldAttachGlobalCExP =
+  typeof window !== "undefined" &&
+  typeof document !== "undefined" &&
+  !!document.currentScript;
+
+if (shouldAttachGlobalCExP) {
+  (globalThis as unknown as { CExP: typeof CExP }).CExP = CExP;
 }
 
 export default CExP;

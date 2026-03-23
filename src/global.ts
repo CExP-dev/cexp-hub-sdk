@@ -4,10 +4,12 @@ const DEFAULT_VERSION = "0.1.0";
 
 export function createCExP(): CExPApi {
   let initialized = false;
+  let initId: string | undefined;
   let anonymousId: string | undefined;
 
   const requireInit = (methodName: string) => {
-    if (!initialized) {
+    // Ensure both `initialized` and the stored `initId` are in sync.
+    if (!initialized || !initId) {
       throw new Error(`[CExP] Cannot call '${methodName}' before init({ id })`);
     }
   };
@@ -25,6 +27,7 @@ export function createCExP(): CExPApi {
         throw new Error("[CExP] init({ id }) is required");
       }
       initialized = true;
+      initId = options.id;
     },
 
     track: (event: unknown) => {
@@ -45,6 +48,7 @@ export function createCExP(): CExPApi {
     reset: () => {
       requireInit("reset");
       initialized = false;
+      initId = undefined;
       anonymousId = undefined;
     },
 
