@@ -63,6 +63,15 @@ export class Hub {
     const overrides = options.pluginOverrides ?? {};
     for (const integrationKey of PLUGIN_ORDER) {
       const plugin = overrides[integrationKey] ?? new NoopPlugin(integrationKey);
+
+      // Runtime guard: integration key drives registry lookup and lifecycle routing.
+      // If plugin.name doesn't match, later tasks/tests may silently route events incorrectly.
+      if (plugin.name !== integrationKey) {
+        throw new Error(
+          `[Hub] Plugin name mismatch for integrationKey "${integrationKey}": expected plugin.name === integrationKey (got "${plugin.name}").`,
+        );
+      }
+
       // Map key is the deterministic registry key (integration key).
       // `Plugin.name` is still expected to match this for later tasks/tests.
       this.plugins.set(integrationKey, plugin);
