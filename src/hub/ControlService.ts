@@ -153,7 +153,13 @@ export class ControlService {
 
     // If the response payload is clearly not a control config, don't apply safe defaults.
     // This prevents accidental "disable everything" updates on malformed responses.
-    if (!isValidControlJson(json)) return this.currentConfig;
+    if (!isValidControlJson(json)) {
+      // Even when strict parsing fails, conditional requests should advance via ETag.
+      // Important: do not change `currentConfig` and do not call `onUpdate`.
+      const newEtag = res.headers.get("etag") ?? undefined;
+      if (newEtag) this.etag = newEtag;
+      return this.currentConfig;
+    }
 
     const newEtag = res.headers.get("etag") ?? undefined;
     const parsed = parseControlConfig(json);

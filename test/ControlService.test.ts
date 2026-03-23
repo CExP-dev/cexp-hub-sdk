@@ -262,8 +262,20 @@ describe("ControlService", () => {
       jsonImpl: async () => "not-a-control-config",
     });
 
+    const res304 = {
+      status: 304,
+      headers: {
+        get: (name: string) => {
+          if (name.toLowerCase() === "etag") return '"v3"';
+          return null;
+        },
+      },
+      json: vi.fn(async () => ({ shouldNotBeParsed: true })),
+    };
+
     fetchMock.mockResolvedValueOnce(res200 as any);
     fetchMock.mockResolvedValueOnce(res200InvalidPayload as any);
+    fetchMock.mockResolvedValueOnce(res304 as any);
 
     const svc = new ControlService({ controlUrl, onUpdate: updateSpy });
     const c1 = await svc.syncOnce();
@@ -273,6 +285,16 @@ describe("ControlService", () => {
     const c2 = await svc.syncOnce();
     expect(c2).toEqual(parsedFirst);
     expect(updateSpy).toHaveBeenCalledTimes(1);
+
+    // Strict parsing failed on the second response, but we should still persist the new ETag
+    // and use it in the next conditional request.
+    const c3 = await svc.syncOnce();
+    expect(c3).toEqual(parsedFirst);
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+
+    const [, thirdInit] = fetchMock.mock.calls[2] as [string, any];
+    expect(thirdInit.method).toBe("GET");
+    expect(thirdInit.headers["If-None-Match"]).toBe('"v2"');
   });
 
   it("startPolling prevents overlapping requests (in-flight guard)", async () => {
