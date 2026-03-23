@@ -9,7 +9,7 @@ export interface CExPApi {
   /**
    * Returns an anonymous id for the current runtime.
    */
-  getAnonymousId: () => string;
+  getAnonymousId?: () => string;
   version: string;
 }
 

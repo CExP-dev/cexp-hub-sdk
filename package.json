@@ -27,7 +27,7 @@
     },
     "./iife": {
       "types": "./dist/index.d.ts",
-      "default": "./dist/index.global.js"
+      "default": "./dist/browser.global.js"
     }
   }
 }
