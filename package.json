@@ -1,0 +1,18 @@
+{
+  "name": "cexp-hub-sdk",
+  "version": "0.1.0",
+  "description": "CExP Hub browser SDK facade.",
+  "type": "module",
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run --passWithNoTests",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "jsdom": "latest",
+    "tsup": "latest",
+    "typescript": "latest",
+    "vitest": "latest"
+  }
+}
