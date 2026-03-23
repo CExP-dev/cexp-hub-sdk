@@ -24,6 +24,26 @@ export interface ControlServiceOptions {
 
 const DEFAULT_CONTROL_BASE_URL = "https://fixed-host.example";
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+};
+
+const isValidControlJson = (input: unknown): input is Record<string, unknown> => {
+  if (!isPlainObject(input)) return false;
+
+  // `version` is expected to be a finite number when present.
+  if ("version" in input && input.version !== undefined) {
+    if (typeof input.version !== "number" || !Number.isFinite(input.version)) return false;
+  }
+
+  // `integrations` is expected to be an object when present.
+  if ("integrations" in input && input.integrations !== undefined) {
+    if (!isPlainObject(input.integrations)) return false;
+  }
+
+  return true;
+};
+
 export class ControlService {
   private readonly controlUrl: string;
   private readonly fetcher: typeof fetch;
@@ -113,7 +133,9 @@ export class ControlService {
     }
 
     if (res.status === 304) {
-      // No body -> no state change.
+      // No body -> no config change, but we may still get a new ETag.
+      const newEtag = res.headers.get("etag") ?? undefined;
+      if (newEtag) this.etag = newEtag;
       return this.currentConfig;
     }
 
@@ -122,8 +144,6 @@ export class ControlService {
       return this.currentConfig;
     }
 
-    const newEtag = res.headers.get("etag") ?? undefined;
-
     let json: unknown;
     try {
       json = await res.json();
@@ -131,6 +151,11 @@ export class ControlService {
       return this.currentConfig;
     }
 
+    // If the response payload is clearly not a control config, don't apply safe defaults.
+    // This prevents accidental "disable everything" updates on malformed responses.
+    if (!isValidControlJson(json)) return this.currentConfig;
+
+    const newEtag = res.headers.get("etag") ?? undefined;
     const parsed = parseControlConfig(json);
 
     // Store ETag even if parsed toggles didn't change.

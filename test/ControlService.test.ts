@@ -50,19 +50,22 @@ describe("ControlService", () => {
 
   let fetchMock: ReturnType<typeof vi.fn>;
   let updateSpy: ReturnType<typeof vi.fn>;
+  let originalFetch: typeof fetch | undefined;
 
   beforeEach(() => {
     fetchMock = vi.fn();
     updateSpy = vi.fn();
+    originalFetch = globalThis.fetch;
     (globalThis as any).fetch = fetchMock;
     vi.useRealTimers();
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    (globalThis as any).fetch = originalFetch;
   });
 
-  it("keeps previous state on 304 (no body) and sends If-None-Match", async () => {
+  it("keeps previous state on 304 (no body) and updates stored ETag", async () => {
     const firstBody = makeControlBody({ version: 10, snowplow: true });
     const parsedFirst: ControlConfig = {
       version: 10,
@@ -79,13 +82,26 @@ describe("ControlService", () => {
     const res304 = {
       status: 304,
       headers: {
-        get: () => null,
+        get: (name: string) => {
+          if (name.toLowerCase() === "etag") return '"v304"';
+          return null;
+        },
       },
       json: res304Json,
     };
 
+    const res304_2Json = vi.fn(async () => ({ shouldNotBeParsedEither: true }));
+    const res304_2 = {
+      status: 304,
+      headers: {
+        get: () => null,
+      },
+      json: res304_2Json,
+    };
+
     fetchMock.mockResolvedValueOnce(res200 as any);
     fetchMock.mockResolvedValueOnce(res304 as any);
+    fetchMock.mockResolvedValueOnce(res304_2 as any);
 
     const svc = new ControlService({ controlUrl, onUpdate: updateSpy });
 
@@ -100,10 +116,27 @@ describe("ControlService", () => {
     // Ensure 304 path didn't parse any body.
     expect(res304Json).not.toHaveBeenCalled();
 
-    // Ensure second request uses ETag conditional header.
+    // First request must not send If-None-Match.
+    const [, firstInit] = fetchMock.mock.calls[0] as [string, any];
+    expect(firstInit.method).toBe("GET");
+    expect(firstInit.headers["If-None-Match"]).toBeUndefined();
+
+    // Second request uses the initial ETag.
     const [, secondInit] = fetchMock.mock.calls[1] as [string, any];
     expect(secondInit.method).toBe("GET");
     expect(secondInit.headers["If-None-Match"]).toBe('"v1"');
+
+    const c3 = await svc.syncOnce();
+    expect(c3).toEqual(parsedFirst);
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+
+    // Third request uses updated ETag from the 304 response.
+    const [, thirdInit] = fetchMock.mock.calls[2] as [string, any];
+    expect(thirdInit.method).toBe("GET");
+    expect(thirdInit.headers["If-None-Match"]).toBe('"v304"');
+
+    // Ensure second 304 didn't parse any body.
+    expect(res304_2Json).not.toHaveBeenCalled();
   });
 
   it("updates toggles on 200 with new body and emits callback", async () => {
@@ -132,6 +165,114 @@ describe("ControlService", () => {
       gamification: false,
       identity: false,
     });
+  });
+
+  it("keeps previous state on non-200 response and does not call onUpdate", async () => {
+    const firstBody = makeControlBody({ version: 10, snowplow: true });
+    const parsedFirst: ControlConfig = {
+      version: 10,
+      integrations: {
+        snowplow: { enabled: true },
+        onesignal: { enabled: false },
+        gamification: { enabled: false },
+        identity: { enabled: false },
+      },
+    };
+
+    const res200 = mockFetchResponse({ status: 200, etag: '"v1"', body: firstBody });
+    const res500Json = vi.fn(async () => ({}));
+    const res500 = {
+      status: 500,
+      headers: {
+        get: (name: string) => {
+          if (name.toLowerCase() === "etag") return '"v500"';
+          return null;
+        },
+      },
+      json: res500Json,
+    };
+
+    fetchMock.mockResolvedValueOnce(res200 as any);
+    fetchMock.mockResolvedValueOnce(res500 as any);
+
+    const svc = new ControlService({ controlUrl, onUpdate: updateSpy });
+    const c1 = await svc.syncOnce();
+    expect(c1).toEqual(parsedFirst);
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+
+    const c2 = await svc.syncOnce();
+    expect(c2).toEqual(parsedFirst);
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+
+    // Non-200 responses should not attempt to parse JSON.
+    expect(res500Json).not.toHaveBeenCalled();
+  });
+
+  it("keeps previous state when res.json throws on 200 and does not call onUpdate", async () => {
+    const firstBody = makeControlBody({ version: 10, snowplow: true });
+    const parsedFirst: ControlConfig = {
+      version: 10,
+      integrations: {
+        snowplow: { enabled: true },
+        onesignal: { enabled: false },
+        gamification: { enabled: false },
+        identity: { enabled: false },
+      },
+    };
+
+    const res200 = mockFetchResponse({ status: 200, etag: '"v1"', body: firstBody });
+    const res200BadJson = mockFetchResponse({
+      status: 200,
+      etag: '"v2"',
+      jsonImpl: async () => {
+        throw new Error("bad json");
+      },
+    });
+
+    fetchMock.mockResolvedValueOnce(res200 as any);
+    fetchMock.mockResolvedValueOnce(res200BadJson as any);
+
+    const svc = new ControlService({ controlUrl, onUpdate: updateSpy });
+    const c1 = await svc.syncOnce();
+    expect(c1).toEqual(parsedFirst);
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+
+    const c2 = await svc.syncOnce();
+    expect(c2).toEqual(parsedFirst);
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps previous state when res.json returns invalid JSON on 200 and does not call onUpdate", async () => {
+    const firstBody = makeControlBody({ version: 10, snowplow: true });
+    const parsedFirst: ControlConfig = {
+      version: 10,
+      integrations: {
+        snowplow: { enabled: true },
+        onesignal: { enabled: false },
+        gamification: { enabled: false },
+        identity: { enabled: false },
+      },
+    };
+
+    const res200 = mockFetchResponse({ status: 200, etag: '"v1"', body: firstBody });
+    const res200InvalidPayload = mockFetchResponse({
+      status: 200,
+      etag: '"v2"',
+      body: "not-a-control-config",
+      jsonImpl: async () => "not-a-control-config",
+    });
+
+    fetchMock.mockResolvedValueOnce(res200 as any);
+    fetchMock.mockResolvedValueOnce(res200InvalidPayload as any);
+
+    const svc = new ControlService({ controlUrl, onUpdate: updateSpy });
+    const c1 = await svc.syncOnce();
+    expect(c1).toEqual(parsedFirst);
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+
+    const c2 = await svc.syncOnce();
+    expect(c2).toEqual(parsedFirst);
+    expect(updateSpy).toHaveBeenCalledTimes(1);
   });
 
   it("startPolling prevents overlapping requests (in-flight guard)", async () => {
