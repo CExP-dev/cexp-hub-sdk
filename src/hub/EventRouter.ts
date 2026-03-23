@@ -15,8 +15,8 @@ type IdentifyQueueEntry = {
  * - When Snowplow becomes enabled, queued identifies are flushed in FIFO order
  *   *before* processing subsequent live events.
  */
-const IDENTIFY_QUEUE_MAX_SIZE = 50;
-const IDENTIFY_QUEUE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+export const IDENTIFY_QUEUE_MAX_SIZE = 50;
+export const IDENTIFY_QUEUE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 /**
  * Event router skeleton.
