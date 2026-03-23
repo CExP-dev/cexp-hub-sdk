@@ -1,4 +1,4 @@
-import { areControlConfigsEqual, parseControlConfig, type ControlConfig } from "../config/schema";
+import { areControlConfigsEqual, tryParseControlConfig, type ControlConfig } from "../config/schema";
 
 export interface ControlServiceOptions {
   /**
@@ -23,26 +23,6 @@ export interface ControlServiceOptions {
 }
 
 const DEFAULT_CONTROL_BASE_URL = "https://fixed-host.example";
-
-const isPlainObject = (value: unknown): value is Record<string, unknown> => {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-};
-
-const isValidControlJson = (input: unknown): input is Record<string, unknown> => {
-  if (!isPlainObject(input)) return false;
-
-  // `version` is expected to be a finite number when present.
-  if ("version" in input && input.version !== undefined) {
-    if (typeof input.version !== "number" || !Number.isFinite(input.version)) return false;
-  }
-
-  // `integrations` is expected to be an object when present.
-  if ("integrations" in input && input.integrations !== undefined) {
-    if (!isPlainObject(input.integrations)) return false;
-  }
-
-  return true;
-};
 
 export class ControlService {
   private readonly controlUrl: string;
@@ -151,21 +131,13 @@ export class ControlService {
       return this.currentConfig;
     }
 
-    // If the response payload is clearly not a control config, don't apply safe defaults.
-    // This prevents accidental "disable everything" updates on malformed responses.
-    if (!isValidControlJson(json)) {
-      // Even when strict parsing fails, conditional requests should advance via ETag.
-      // Important: do not change `currentConfig` and do not call `onUpdate`.
-      const newEtag = res.headers.get("etag") ?? undefined;
-      if (newEtag) this.etag = newEtag;
-      return this.currentConfig;
-    }
-
+    // Preserve ETag progression even when strict parsing fails.
     const newEtag = res.headers.get("etag") ?? undefined;
-    const parsed = parseControlConfig(json);
-
-    // Store ETag even if parsed toggles didn't change.
+    const parsed = tryParseControlConfig(json);
     if (newEtag) this.etag = newEtag;
+
+    // Strict parsing failed: keep previous state and do not call `onUpdate`.
+    if (!parsed) return this.currentConfig;
 
     if (this.shouldUpdateConfig(parsed)) {
       this.currentConfig = parsed;

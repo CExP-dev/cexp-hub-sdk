@@ -297,6 +297,126 @@ describe("ControlService", () => {
     expect(thirdInit.headers["If-None-Match"]).toBe('"v2"');
   });
 
+  it("keeps previous state on 200 with missing integrations and does not call onUpdate", async () => {
+    const firstBody = makeControlBody({ version: 10, snowplow: true });
+    const parsedFirst: ControlConfig = {
+      version: 10,
+      integrations: {
+        snowplow: { enabled: true },
+        onesignal: { enabled: false },
+        gamification: { enabled: false },
+        identity: { enabled: false },
+      },
+    };
+
+    const res200 = mockFetchResponse({ status: 200, etag: '"v1"', body: firstBody });
+    const res200MissingIntegrations = mockFetchResponse({
+      status: 200,
+      etag: '"v2"',
+      body: { version: 11 }, // missing `integrations`
+      jsonImpl: async () => ({ version: 11 }),
+    });
+
+    const res304Json = vi.fn(async () => ({ shouldNotBeParsed: true }));
+    const res304 = {
+      status: 304,
+      headers: {
+        get: (name: string) => {
+          if (name.toLowerCase() === "etag") return '"v3"';
+          return null;
+        },
+      },
+      json: res304Json,
+    };
+
+    fetchMock.mockResolvedValueOnce(res200 as any);
+    fetchMock.mockResolvedValueOnce(res200MissingIntegrations as any);
+    fetchMock.mockResolvedValueOnce(res304 as any);
+
+    const svc = new ControlService({ controlUrl, onUpdate: updateSpy });
+    const c1 = await svc.syncOnce();
+    expect(c1).toEqual(parsedFirst);
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+
+    const c2 = await svc.syncOnce();
+    expect(c2).toEqual(parsedFirst);
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+
+    const c3 = await svc.syncOnce();
+    expect(c3).toEqual(parsedFirst);
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+
+    // Even on strict parsing failure, ETag must be persisted.
+    const [, thirdInit] = fetchMock.mock.calls[2] as [string, any];
+    expect(thirdInit.headers["If-None-Match"]).toBe('"v2"');
+    expect(res304Json).not.toHaveBeenCalled();
+  });
+
+  it("keeps previous state on 200 with non-boolean enabled integration and does not call onUpdate", async () => {
+    const firstBody = makeControlBody({ version: 10, snowplow: true });
+    const parsedFirst: ControlConfig = {
+      version: 10,
+      integrations: {
+        snowplow: { enabled: true },
+        onesignal: { enabled: false },
+        gamification: { enabled: false },
+        identity: { enabled: false },
+      },
+    };
+
+    const res200 = mockFetchResponse({ status: 200, etag: '"v1"', body: firstBody });
+    const res200BadEnabled = mockFetchResponse({
+      status: 200,
+      etag: '"v2"',
+      body: {
+        version: 11,
+        integrations: {
+          snowplow: { enabled: "not-a-boolean" },
+        },
+      },
+      jsonImpl: async () => ({
+        version: 11,
+        integrations: {
+          snowplow: { enabled: "not-a-boolean" },
+        },
+      }),
+    });
+
+    const res304Json = vi.fn(async () => ({ shouldNotBeParsed: true }));
+    const res304 = {
+      status: 304,
+      headers: {
+        get: (name: string) => {
+          if (name.toLowerCase() === "etag") return '"v3"';
+          return null;
+        },
+      },
+      json: res304Json,
+    };
+
+    fetchMock.mockResolvedValueOnce(res200 as any);
+    fetchMock.mockResolvedValueOnce(res200BadEnabled as any);
+    fetchMock.mockResolvedValueOnce(res304 as any);
+
+    const svc = new ControlService({ controlUrl, onUpdate: updateSpy });
+    const c1 = await svc.syncOnce();
+    expect(c1).toEqual(parsedFirst);
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+
+    const c2 = await svc.syncOnce();
+    expect(c2).toEqual(parsedFirst);
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+
+    const c3 = await svc.syncOnce();
+    expect(c3).toEqual(parsedFirst);
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+
+    // Even on strict parsing failure, ETag must be persisted.
+    const [, thirdInit] = fetchMock.mock.calls[2] as [string, any];
+    expect(thirdInit.headers["If-None-Match"]).toBe('"v2"');
+    expect(res304Json).not.toHaveBeenCalled();
+  });
+
   it("startPolling prevents overlapping requests (in-flight guard)", async () => {
     vi.useFakeTimers();
 

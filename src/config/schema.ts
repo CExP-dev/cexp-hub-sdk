@@ -11,6 +11,17 @@ export interface ControlConfig {
 
 const INTEGRATION_KEYS: IntegrationKey[] = ["snowplow", "onesignal", "gamification", "identity"];
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+  // Strictly require an object literal-like shape (no arrays); tolerate null-proto objects.
+  try {
+    if (typeof value !== "object" || value === null) return false;
+    const proto = Object.getPrototypeOf(value);
+    return proto === Object.prototype || proto === null;
+  } catch {
+    return false;
+  }
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null;
 };
@@ -55,6 +66,58 @@ export function parseControlConfig(input: unknown): ControlConfig {
   }
 
   return { version, integrations };
+}
+
+/**
+ * Strict parse a remote control payload into a safe internal shape.
+ *
+ * Rules:
+ * - input must be a plain object
+ * - `version` must exist and be a finite number
+ * - `integrations` must exist and be a plain object
+ * - for each known integration key:
+ *   - missing block => enabled false
+ *   - present block => must be plain object and `enabled` must be boolean
+ * - unknown keys are ignored
+ *
+ * Never throws; returns `undefined` on any validation failure.
+ */
+export function tryParseControlConfig(input: unknown): ControlConfig | undefined {
+  try {
+    if (!isPlainObject(input)) return undefined;
+
+    const version = (input as Record<string, unknown>).version;
+    if (typeof version !== "number" || !Number.isFinite(version)) return undefined;
+
+    const integrationsInput = (input as Record<string, unknown>).integrations;
+    if (!isPlainObject(integrationsInput)) return undefined;
+
+    const integrations: ControlConfig["integrations"] = {
+      snowplow: { enabled: false },
+      onesignal: { enabled: false },
+      gamification: { enabled: false },
+      identity: { enabled: false },
+    };
+
+    for (const key of INTEGRATION_KEYS) {
+      const integrationsHasOwnKey = Object.prototype.hasOwnProperty.call(integrationsInput, key);
+      if (!integrationsHasOwnKey) {
+        integrations[key] = { enabled: false };
+        continue;
+      }
+
+      const block = (integrationsInput as Record<string, unknown>)[key];
+      if (!isPlainObject(block)) return undefined;
+
+      const enabled = (block as Record<string, unknown>).enabled;
+      if (typeof enabled !== "boolean") return undefined;
+      integrations[key] = { enabled };
+    }
+
+    return { version, integrations };
+  } catch {
+    return undefined;
+  }
 }
 
 export function areControlConfigsEqual(a: ControlConfig, b: ControlConfig): boolean {
