@@ -77,7 +77,6 @@ export class Hub {
     this.currentToggles = next;
 
     this.ensureInitialized();
-    const ctx = this.getContext();
 
     // Call onToggle for each plugin that changed (including initial sync).
     for (const integrationKey of PLUGIN_ORDER) {
@@ -89,8 +88,6 @@ export class Hub {
         plugin.onToggle(enabled);
       }
     }
-
-    void ctx;
   }
 
   getPlugin(name: string): Plugin | undefined {
@@ -118,9 +115,9 @@ export class Hub {
   }
 
   private getContext(): HubContext {
-    const toggles = this.currentToggles ?? DEFAULT_TOGGLES;
     return {
-      getToggles: () => toggles,
+      // Important: read toggles at call time to avoid stale closure state after `setToggles()`.
+      getToggles: () => this.currentToggles ?? DEFAULT_TOGGLES,
       getAnonymousId: () => this.anonymousId,
       getUserId: () => null,
     };
