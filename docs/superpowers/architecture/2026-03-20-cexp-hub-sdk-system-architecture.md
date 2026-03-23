@@ -6,6 +6,10 @@ Diagrams use [Mermaid](https://mermaid.js.org/); render in GitHub, VS Code (prev
 
 ---
 
+## Integration philosophy (integrate once, never touch script again)
+
+Consumers embed a single stable CDN script snippet (e.g. `window.CExP`) one time. After that, toggles and integration behavior are driven by your backend (control/toggle polling), and the SDK injects vendor scripts lazily per integration. This lets your platform evolve without forcing consumers to update their snippet.
+
 ## 1. System context (who talks to whom)
 
 Actors: **Consumer** (developer who embeds the script), **End user** (browser visitor), **CExP backend** (your config/toggles), **third-party / in-house services**.
@@ -39,10 +43,10 @@ flowchart TB
   EndUserPerson[End user] --> Browser
 
   Script -->|"GET config sdkId ETag poll 5m"| ConfigAPI
-  Script -->|"events page track identify"| SnowplowCol
-  Script --> OneSignalSvc
-  Script -->|"load cdp.js"| CdpHost
-  Script -->|"load cexp-web-sdk"| GamCDN
+  Script -->|"lazy load/enable Snowplow"| SnowplowCol
+  Script -->|"lazy load/enable OneSignal (Deferred init)"| OneSignalSvc
+  Script -->|"lazy load/enable cdp.js"| CdpHost
+  Script -->|"lazy load/enable cexp-web-sdk"| GamCDN
 ```
 
 ---
@@ -98,7 +102,7 @@ flowchart LR
   subgraph initPhase [After CExP.init id]
     A[init with sdkId] --> B[ControlService fetch config]
     B --> C[Apply toggles and integration config]
-    C --> D[Init enabled plugins]
+    C --> D[Lazy-load enabled plugins]
     D --> E[Start SPA hooks and polling]
   end
 
@@ -109,6 +113,25 @@ flowchart LR
     F --> G[EventRouter]
     G -->|"per toggle and rules"| H[Plugins]
   end
+```
+
+### OneSignal deferred embed (used internally)
+
+When `onesignal.enabled` is true, the hub injects the OneSignal script and performs deferred initialization using the pattern below (consumer never touches OneSignal vendor globals):
+
+```html
+<script
+  src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
+  defer
+></script>
+<script>
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  OneSignalDeferred.push(async function (OneSignal) {
+    await OneSignal.init({
+      appId: `${onesignal_app_id}`,
+    });
+  });
+</script>
 ```
 
 ---
@@ -165,7 +188,7 @@ flowchart TB
 |---------------|-------------------------------|
 | Snowplow | Queue **identify** only; drop **track** and **page** |
 | OneSignal | Clear user or subscription association per vendor API |
-| Gamification | Drop gamification-bound calls; script loaded when enabled at init |
+| Gamification | Drop gamification-bound calls; script loaded when enabled (lazy) |
 | Identity | Drives `fpt_uuid`; storage localStorage plus cookie fallback |
 
 ```mermaid

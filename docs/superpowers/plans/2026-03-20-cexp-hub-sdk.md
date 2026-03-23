@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship a single browser SDK (`window.CExP`) that consumers integrate with a script tag plus `CExP.init({ id: sdkId })`; all analytics, push, identity (`fpt_uuid`), and gamification go through the hub—never direct `Snowplow` / `OneSignal` / vendor globals.
+**Goal:** Ship a single browser SDK (`window.CExP`) that consumers integrate with a script tag plus `CExP.init({ id: sdkId })`; all analytics, push, identity (`fpt_uuid`), and gamification go through the hub—never direct `Snowplow` / `OneSignal` / vendor globals. Consumers integrate once; the SDK stays evergreen and behavior is governed by backend toggles (so consumers never need to update their snippet).
 
-**Architecture:** A small **facade** (`CExP`) loads remote **control + integration config** keyed by `sdkId`, maintains **toggle state** (polled every 5 minutes with conditional GETs), and dispatches enriched events to **internal plugins** (Snowplow, OneSignal, cdp.js identity, cexp-gamification). Plugins are registered inside the package; the public API is only `CExP.*`. **End users** are distinct from **consumers**: anonymous id is canonical `fpt_uuid` (localStorage + cookie fallback); known users via `CExP.identify(userId, traits)`.
+**Architecture:** A small **facade** (`CExP`) loads remote **control + integration config** keyed by `sdkId`, maintains **toggle state** (polled every 5 minutes with conditional GETs), and dispatches enriched events to **internal plugins** (Snowplow, OneSignal, cdp.js identity, cexp-gamification). Plugins are loaded and activated **lazily per integration** when toggles indicate enabled. Plugins are registered inside the package; the public API is only `CExP.*`. **End users** are distinct from **consumers**: anonymous id is canonical `fpt_uuid` (localStorage + cookie fallback); known users via `CExP.identify(userId, traits)`.
 
 **Tech Stack:** TypeScript, bundler (recommend **tsup** or **rollup**), Vitest (or Jest) for unit tests, optional Playwright for smoke. Snowplow browser tracker, OneSignal Web SDK (loaded dynamically), in-house scripts: [`cdp.js`](https://octopus-stream01-cads.fpt.vn/cdp.js), gamification [`cexp-web-sdk.js`](https://cdn.jsdelivr.net/npm/cexp-gamification@1.0.1-beta.9/dist/cexp-web-sdk.js) (version pinned in hub).
 
@@ -20,13 +20,15 @@
 | Public API | Only `window.CExP` (or global export); **no** `Snowplow.*`, `OneSignal.*`, `window.cexp` / `cdpFpt` in consumer docs. |
 | Remote config | **Single round-trip recommended:** backend returns **toggles + per-integration non-secret config** resolved by `sdkId` (toggles-only JSON is insufficient if consumer never passes keys—use one response or two coordinated endpoints). |
 | Control refresh | Fixed base URL; poll every **5 minutes**; use **ETag** / **If-Modified-Since**; on fetch failure, **keep last good** toggles. |
+| Integrate once (evergreen snippet) | Consumers never update the script after initial integration; config contract must be backwards compatible indefinitely and unknown config keys are ignored. |
+| Lazy load per integration | Vendor scripts are injected only when the corresponding integration toggle transitions to enabled; toggled-off integrations stop outbound integration traffic (with your chosen queue/drop/teardown rules). |
 | `anonymousId` | Canonical **`fpt_uuid`**; persist **localStorage + cookie** fallback. |
 | `identify` | `userId` + optional `traits` object. |
 | `reset` | Clear user + traits; **retain** `fpt_uuid`. |
 | SPA `page_view` | Auto on route change: wrap `history.pushState` / `replaceState` + `popstate`. |
 | Snowplow off | **Queue identify only**; **drop** `track` + `page_view` until re-enabled. |
 | OneSignal off | **Clear** subscription / external user association per vendor API. |
-| Gamification off | **Drop** gamification calls immediately; load gamification script when integration enabled at init. |
+| Gamification off | **Drop** gamification calls immediately; load gamification script when integration enabled (lazy). |
 
 ---
 
@@ -210,7 +212,7 @@ export interface Plugin {
 - Create: `src/hub/IdentityStore.ts`
 - Create: `src/plugins/identity/CdpIdentityPlugin.ts`
 
-- [ ] **Step 1:** Load `cdp.js` via dynamic script injection once when identity integration enabled.
+- [ ] **Step 1:** Lazy-load `cdp.js` via dynamic script injection once when identity integration is enabled by remote toggles.
 - [ ] **Step 2:** Read `fpt_uuid` from same storage keys / APIs `cdp.js` uses; fallback: generate UUID v4 only if spec requires (prefer always from cdp after load).
 - [ ] **Step 3:** Persist mirror in **localStorage + cookie** (namespaced keys, e.g. `cexp_fpt_uuid`) for hub consistency if cdp is slow.
 - [ ] **Step 4:** Test with mocked `window.cdpFpt` / storage (integration test optional).
@@ -236,7 +238,7 @@ export interface Plugin {
 **Files:**
 - Modify: `src/plugins/snowplow/SnowplowPlugin.ts`
 
-- [ ] **Step 1:** Add Snowplow browser tracker dependency per official docs; initialize from **remote config** only (no consumer keys in HTML).
+- [ ] **Step 1:** Lazy-load/initialize Snowplow tracker only when Snowplow integration toggle is enabled (no consumer keys in HTML).
 - [ ] **Step 2:** Map `CExP.track` / `page` / `identify` to Snowplow APIs.
 - [ ] **Step 3:** Manual smoke in example HTML page (optional folder `examples/`).
 - [ ] **Step 4:** Commit: `feat: Snowplow plugin integration`
@@ -248,10 +250,27 @@ export interface Plugin {
 **Files:**
 - Create: `src/plugins/onesignal/OneSignalPlugin.ts`
 
-- [ ] **Step 1:** Dynamic load OneSignal SDK script from config.
+- [ ] **Step 1:** Lazy-load OneSignal using the OneSignalDeferred pattern (inject `OneSignalSDK.page.js` and then `OneSignal.init({ appId })` only when `onesignal.enabled` is true).
 - [ ] **Step 2:** On toggle **off**: call vendor APIs to **logout / clear user** / tags as supported.
 - [ ] **Step 3:** On toggle **on**: init with app id from remote config; link `userId` on `identify`.
 - [ ] **Step 4:** Commit: `feat: OneSignal plugin`
+
+OneSignalDeferred embed pattern (used internally by the plugin):
+
+```html
+<script
+  src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
+  defer
+></script>
+<script>
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  OneSignalDeferred.push(async function (OneSignal) {
+    await OneSignal.init({
+      appId: `${onesignal_app_id}`,
+    });
+  });
+</script>
+```
 
 ---
 
@@ -260,7 +279,7 @@ export interface Plugin {
 **Files:**
 - Create: `src/plugins/gamification/GamificationPlugin.ts`
 
-- [ ] **Step 1:** When enabled at init, inject `cexp-web-sdk.js` (pin version from remote config).
+- [ ] **Step 1:** Lazy-load `cexp-web-sdk.js` when gamification integration toggle is enabled (pin version from remote config).
 - [ ] **Step 2:** Instantiate `new window.cexp({ apiKey: fromRemote })` and `init()` **inside plugin only**.
 - [ ] **Step 3:** Forward relevant `track` / identity signals only if gamification API is documented; otherwise no-op `track` forwarding until API is confirmed.
 - [ ] **Step 4:** On toggle off: stop forwarding; if library supports teardown, call it.
@@ -274,7 +293,7 @@ export interface Plugin {
 - Create: `src/hub/Hub.ts`
 - Modify: `src/global.ts`
 
-- [ ] **Step 1:** `init({ id })` starts `ControlService`, resolves config, instantiates plugins, starts SPA listener.
+- [ ] **Step 1:** `init({ id })` starts `ControlService`, resolves toggles/config, instantiates core hub services and SPA hooks; plugins are **lazy-loaded/activated** per enabled integration.
 - [ ] **Step 2:** `track`, `page`, `identify`, `reset` call `EventRouter` + `IdentityStore` / plugins per toggles.
 - [ ] **Step 3:** Throw or no-op with warning if `init` not called (choose one; document).
 - [ ] **Step 4:** Commit: `feat: wire Hub facade to CExP`
@@ -307,7 +326,7 @@ export interface Plugin {
 ## Open points (resolve during implementation)
 
 1. **Exact backend URL** for `sdkId` config + toggles (replace placeholder in `ControlService`).
-2. **JSON schema** final field names for each integration block.
+2. **Stable config contract** field names for each integration block (no schemaVersion; unknown fields ignored; missing fields use safe defaults).
 3. **Gamification** obfuscated bundle — confirm public methods for user binding if beyond `init()`.
 
 ---
