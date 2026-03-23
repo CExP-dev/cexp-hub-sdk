@@ -1,4 +1,3 @@
-import type { IntegrationToggles } from "../types";
 import type { HubContext, Plugin } from "../plugins/types";
 
 type IdentifyQueueEntry = {
@@ -30,7 +29,7 @@ export class EventRouter {
   private readonly plugins: Map<string, Plugin>;
   private identifyQueue: IdentifyQueueEntry[] = [];
 
-  constructor(args: { ctx: HubContext; plugins: Map<string, Plugin>; _toggles?: IntegrationToggles }) {
+  constructor(args: { ctx: HubContext; plugins: Map<string, Plugin> }) {
     this.ctx = args.ctx;
     this.plugins = args.plugins;
   }

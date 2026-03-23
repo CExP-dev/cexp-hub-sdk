@@ -42,6 +42,40 @@ describe("EventRouter + Snowplow identify queue rules", () => {
     expect(snowplow.callSequence).toEqual(["identify:user-1", "track:signup"]);
   });
 
+  it("Snowplow on: flush queued identifies before live identify", () => {
+    let toggles: IntegrationToggles = {
+      snowplow: false,
+      onesignal: false,
+      gamification: false,
+      identity: false,
+    };
+
+    const ctx = {
+      getToggles: () => toggles,
+      getAnonymousId: () => "anon-1",
+      getUserId: () => null,
+    };
+
+    const snowplow = new SnowplowPlugin();
+    const plugins: Map<string, Plugin> = new Map([["snowplow", snowplow]]);
+    const router = new EventRouter({ ctx, plugins });
+
+    router.identify("queued-user", { plan: "queued" });
+    expect(snowplow.identifyCalls).toHaveLength(0);
+
+    // Enable Snowplow: calling `identify()` should flush queued identifies first,
+    // then perform the live identify.
+    toggles = { ...toggles, snowplow: true };
+    router.identify("live-user", { plan: "live" });
+
+    expect(snowplow.identifyCalls).toHaveLength(2);
+    expect(snowplow.identifyCalls[0].userId).toBe("queued-user");
+    expect(snowplow.identifyCalls[0].traits).toEqual({ plan: "queued" });
+    expect(snowplow.identifyCalls[1].userId).toBe("live-user");
+    expect(snowplow.identifyCalls[1].traits).toEqual({ plan: "live" });
+    expect(snowplow.callSequence).toEqual(["identify:queued-user", "identify:live-user"]);
+  });
+
   it("Multi-entry FIFO: queued identifies flush in enqueue order before live events", () => {
     let toggles: IntegrationToggles = {
       snowplow: false,

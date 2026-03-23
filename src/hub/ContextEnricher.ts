@@ -7,6 +7,29 @@ export type ContextEnrichment = {
   timestamp: number;
 };
 
+type OptionalKeys<T> = {
+  [K in keyof T]-?: {} extends Pick<T, K> ? K : never;
+}[keyof T];
+
+type RequiredKeys<T> = Exclude<keyof T, OptionalKeys<T>>;
+
+/**
+ * Models runtime merge policy:
+ * - Enricher provides defaults for `ContextEnrichment` keys.
+ * - If the user supplies the same keys, the user values win (explicit user keys are never overwritten).
+ *
+ * Additionally models "presence":
+ * - If a key is required in `UserProps`, the return type uses the user-provided type.
+ * - If a key is optional in `UserProps`, the return type becomes `default | user` since the key may be absent at runtime.
+ */
+type MergeContextEnrichment<UserProps extends Record<string, unknown>> = {
+  [K in keyof ContextEnrichment]: K extends keyof UserProps
+    ? K extends RequiredKeys<UserProps>
+      ? UserProps[K]
+      : ContextEnrichment[K] | UserProps[K]
+    : ContextEnrichment[K];
+} & Omit<UserProps, keyof ContextEnrichment>;
+
 /**
  * Enriches a user-provided payload with runtime context (URL/referrer/device/ts).
  *
@@ -15,7 +38,9 @@ export type ContextEnrichment = {
  * - If the user supplies the same keys, the user values win (explicit user keys are never overwritten).
  */
 export class ContextEnricher {
-  enrich(userProps: Record<string, unknown> = {}): ContextEnrichment & Record<string, unknown> {
+  enrich<UserProps extends Record<string, unknown> = {}>(
+    userProps?: UserProps,
+  ): MergeContextEnrichment<UserProps> {
     const timestamp = Date.now();
 
     const pageUrl =
@@ -37,7 +62,7 @@ export class ContextEnricher {
       timestamp,
     };
 
-    return { ...enriched, ...(userProps ?? {}) };
+    return { ...enriched, ...(userProps ?? {}) } as MergeContextEnrichment<UserProps>;
   }
 
   private getLocale(): string {
