@@ -1,5 +1,12 @@
 export type InitOptions = { id: string };
 
+export type IntegrationToggles = {
+  snowplow: boolean;
+  onesignal: boolean;
+  gamification: boolean;
+  identity: boolean;
+};
+
 export interface CExPApi {
   init: (options: InitOptions) => void;
   track: (event: unknown) => void;
