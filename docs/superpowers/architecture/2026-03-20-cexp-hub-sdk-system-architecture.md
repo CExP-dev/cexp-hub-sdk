@@ -115,27 +115,6 @@ flowchart LR
   end
 ```
 
-### OneSignal deferred embed (used internally)
-
-When `onesignal.enabled` is true, the hub injects the OneSignal script and performs deferred initialization using the pattern below (consumer never touches OneSignal vendor globals):
-
-```html
-<script
-  src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
-  defer
-></script>
-<script>
-  window.OneSignalDeferred = window.OneSignalDeferred || [];
-  OneSignalDeferred.push(async function (OneSignal) {
-    await OneSignal.init({
-      appId: `${onesignal_app_id}`,
-    });
-  });
-</script>
-```
-
----
-
 ## 4. Control and toggle loop
 
 ```mermaid
@@ -184,12 +163,12 @@ flowchart TB
 
 ## 6. Event routing rules (plan snapshot)
 
-| Integration | Toggle off behavior (planned) |
-|---------------|-------------------------------|
-| Snowplow | Queue **identify** only; drop **track** and **page** |
-| OneSignal | Clear user or subscription association per vendor API |
+| Integration  | Toggle off behavior (planned)                                    |
+| ------------ | ---------------------------------------------------------------- |
+| Snowplow     | Queue **identify** only; drop **track** and **page**             |
+| OneSignal    | Clear user or subscription association per vendor API            |
 | Gamification | Drop gamification-bound calls; script loaded when enabled (lazy) |
-| Identity | Drives `fpt_uuid`; storage localStorage plus cookie fallback |
+| Identity     | Drives `fpt_uuid`; storage localStorage plus cookie fallback     |
 
 ```mermaid
 flowchart TB
