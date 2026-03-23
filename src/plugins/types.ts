@@ -38,6 +38,28 @@ export interface Plugin {
   onToggle(enabled: boolean): void;
 
   /**
+   * Optional event hook for event tracking.
+   *
+   * Used by later tasks to delegate routing to plugins.
+   */
+  track?(event: string, props: Record<string, unknown>): void;
+
+  /**
+   * Optional hook for page/view navigation events.
+   */
+  page?(props: Record<string, unknown>): void;
+
+  /**
+   * Optional hook for identity updates.
+   */
+  identify?(userId: string, traits?: Record<string, unknown>): void;
+
+  /**
+   * Optional hook for resetting internal plugin state.
+   */
+  reset?(): void;
+
+  /**
    * Called when the integration is torn down.
    */
   destroy?(): void;
