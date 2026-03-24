@@ -1,6 +1,7 @@
 import type { IntegrationToggles } from "../types";
 import type { IntegrationKey } from "../config/schema";
 import type { HubContext, Plugin } from "../plugins/types";
+import { createSpaPageView, DEFAULT_SPA_PAGE_DEBOUNCE_MS } from "./SpaPageView";
 
 const DEFAULT_TOGGLES: IntegrationToggles = {
   snowplow: false,
@@ -57,6 +58,8 @@ export class Hub {
   private initialized = false;
   private currentToggles: IntegrationToggles | undefined;
 
+  private spaHandle?: ReturnType<typeof createSpaPageView>;
+
   constructor(options: HubOptions = {}) {
     this.anonymousId = options.anonymousId ?? null;
 
@@ -109,6 +112,30 @@ export class Hub {
    */
   getPluginOrder(): string[] {
     return [...PLUGIN_ORDER];
+  }
+
+  /**
+   * Subscribe to SPA navigations (`pushState` / `replaceState` / `popstate`) and
+   * emit debounced page payloads. Replaces any previous SPA subscription.
+   *
+   * Call `notifySpaExplicitPage()` when routing an explicit `CExP.page()` so the
+   * debounced SPA callback does not duplicate that view.
+   */
+  enableSpaPageView(
+    onPage: (props: Record<string, unknown>) => void,
+    debounceMs: number = DEFAULT_SPA_PAGE_DEBOUNCE_MS,
+  ): void {
+    this.disableSpaPageView();
+    this.spaHandle = createSpaPageView({ debounceMs, onPage });
+  }
+
+  disableSpaPageView(): void {
+    this.spaHandle?.stop();
+    this.spaHandle = undefined;
+  }
+
+  notifySpaExplicitPage(): void {
+    this.spaHandle?.notifyExplicitPage();
   }
 
   private ensureInitialized(): void {
