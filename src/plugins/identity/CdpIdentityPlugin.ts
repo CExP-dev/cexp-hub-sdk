@@ -106,12 +106,27 @@ function ensureCdpScriptLoaded(): Promise<void> {
     script.src = CDP_JS_URL;
     script.async = true;
 
+    // Newly injected script might never emit `load`/`error` (e.g. blocked by the host).
+    // Always settle so enable attempts never hang.
+    let settled = false;
+    const timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error("[CdpIdentityPlugin] cdp.js load timeout"));
+    }, CDP_SCRIPT_LOAD_TIMEOUT_MS);
+
     script.onload = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
       script.setAttribute(SCRIPT_MARKER_ATTR, "true");
       resolve();
     };
 
     script.onerror = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
       reject(new Error("[CdpIdentityPlugin] cdp.js load error"));
     };
 
