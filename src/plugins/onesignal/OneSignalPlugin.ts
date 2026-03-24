@@ -163,7 +163,6 @@ export class OneSignalPlugin implements Plugin {
 
     const os = this.oneSignal;
     this.oneSignal = undefined;
-    this.initSettled = false;
     this.pendingUserId = null;
 
     if (os) {

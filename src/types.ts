@@ -9,9 +9,9 @@ export type IntegrationToggles = {
 
 export interface CExPApi {
   init: (options: InitOptions) => void;
-  track: (event: unknown) => void;
-  page: (page: unknown) => void;
-  identify: (identity: unknown) => void;
+  track: (eventName: string, props?: Record<string, unknown>) => void;
+  page: (pageProps?: Record<string, unknown>) => void;
+  identify: (userId: string, traits?: Record<string, unknown>) => void;
   reset: () => void;
   /**
    * Returns an anonymous id for the current runtime.

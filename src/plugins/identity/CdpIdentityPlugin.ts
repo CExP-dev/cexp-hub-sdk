@@ -20,6 +20,7 @@ let cdpLoadPromise: Promise<void> | undefined;
 type CdpFptLike = {
   getFptUuid?: () => unknown;
   fpt_uuid?: unknown;
+  initialize?: (...args: unknown[]) => unknown;
 };
 
 function getCdpFptUuidIfReady(): string | undefined {
@@ -50,6 +51,25 @@ async function waitForCdpFptReady(): Promise<void> {
     if (getCdpFptUuidIfReady()) return;
     if (Date.now() - start >= CDP_FPT_READY_TIMEOUT_MS) return;
     await new Promise<void>((r) => setTimeout(r, CDP_FPT_READY_POLL_INTERVAL_MS));
+  }
+}
+
+function disableCdpEventPipeline(): void {
+  const cdpFpt = (globalThis as unknown as { cdpFpt?: CdpFptLike }).cdpFpt;
+  if (!cdpFpt || typeof cdpFpt.initialize !== "function") return;
+
+  // Best-effort for Segment-style API signatures in cdp.js forks:
+  // prevent forwarding events to Segment.io while keeping identity APIs available.
+  try {
+    cdpFpt.initialize({}, { "Segment.io": false });
+    return;
+  } catch {
+    // try alternate shapes
+  }
+  try {
+    cdpFpt.initialize({ integrations: { "Segment.io": false } });
+  } catch {
+    // ignore; identity fallback remains available via IdentityStore.
   }
 }
 
@@ -179,6 +199,7 @@ export class CdpIdentityPlugin implements Plugin {
 
     // Avoid generating and persisting a random UUID before CDP finished initializing.
     await waitForCdpFptReady();
+    disableCdpEventPipeline();
     IdentityStore.getOrCreateFptUuid();
   }
 }

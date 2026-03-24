@@ -120,6 +120,8 @@ export class SnowplowPlugin implements Plugin {
 
   private userId: string | null = null;
   private traits: Record<string, unknown> | undefined;
+  private pendingTracks: Array<{ event: string; props: Record<string, unknown> }> = [];
+  private pendingPages: Array<{ props: Record<string, unknown> }> = [];
 
   init(ctx: HubContext, config: unknown): void {
     this.ctx = ctx;
@@ -148,7 +150,11 @@ export class SnowplowPlugin implements Plugin {
 
   track(event: string, props: Record<string, unknown>): void {
     const sp = getSnowplowGlobal();
-    if (!this.active || !this.trackerInitialized || !sp) return;
+    if (!this.active) return;
+    if (!this.trackerInitialized || !sp) {
+      this.pendingTracks.push({ event, props });
+      return;
+    }
 
     sp(
       "trackSelfDescribingEvent",
@@ -167,7 +173,11 @@ export class SnowplowPlugin implements Plugin {
 
   page(props: Record<string, unknown>): void {
     const sp = getSnowplowGlobal();
-    if (!this.active || !this.trackerInitialized || !sp) return;
+    if (!this.active) return;
+    if (!this.trackerInitialized || !sp) {
+      this.pendingPages.push({ props });
+      return;
+    }
 
     const { context: _drop, ...rest } = props;
     sp("trackPageView", {
@@ -205,6 +215,7 @@ export class SnowplowPlugin implements Plugin {
       });
 
       this.trackerInitialized = true;
+      this.flushPendingEvents(sp);
     }
   }
 
@@ -219,6 +230,8 @@ export class SnowplowPlugin implements Plugin {
     }
 
     this.trackerInitialized = false;
+    this.pendingTracks = [];
+    this.pendingPages = [];
 
     if (typeof document !== "undefined") {
       document.querySelectorAll<HTMLScriptElement>(`script[src="${SNOWPLOW_SCRIPT_URL}"]`).forEach((el) => el.remove());
@@ -246,5 +259,32 @@ export class SnowplowPlugin implements Plugin {
         },
       },
     ];
+  }
+
+  private flushPendingEvents(sp: SnowplowCommandFn): void {
+    while (this.pendingTracks.length > 0) {
+      const next = this.pendingTracks.shift();
+      if (!next) break;
+      sp("trackSelfDescribingEvent", {
+        event: {
+          schema: CEXP_CUSTOM_EVENT_SCHEMA,
+          data: {
+            event_name: next.event,
+            properties: next.props,
+          },
+        },
+        context: this.buildIdentityContexts(),
+      });
+    }
+
+    while (this.pendingPages.length > 0) {
+      const next = this.pendingPages.shift();
+      if (!next) break;
+      const { context: _drop, ...rest } = next.props;
+      sp("trackPageView", {
+        ...rest,
+        context: this.buildIdentityContexts(),
+      });
+    }
   }
 }

@@ -37,15 +37,19 @@ export class EventRouter {
   track(_event: string, _props?: Record<string, unknown>): void {
     const snowplowEnabled = this.ctx.getToggles().snowplow;
     const snowplow = this.plugins.get("snowplow");
+    const gamification = this.plugins.get("gamification");
 
     if (!snowplowEnabled) {
-      // Snowplow disabled => drop track/page events.
+      // Snowplow disabled => drop track/page events for analytics.
       return;
     }
 
     // Snowplow enabled => flush identify queue before processing live events.
     this.flushIdentifyQueue(snowplow);
     snowplow?.track?.(_event, _props ?? {});
+    if (this.ctx.getToggles().gamification) {
+      gamification?.track?.(_event, _props ?? {});
+    }
   }
 
   page(_props?: Record<string, unknown>): void {
@@ -64,6 +68,14 @@ export class EventRouter {
   identify(_userId: string, _traits?: Record<string, unknown>): void {
     const snowplowEnabled = this.ctx.getToggles().snowplow;
     const snowplow = this.plugins.get("snowplow");
+    const onesignal = this.plugins.get("onesignal");
+    const gamification = this.plugins.get("gamification");
+    const identity = this.plugins.get("identity");
+
+    // Non-Snowplow integrations still receive identify when enabled.
+    if (this.ctx.getToggles().onesignal) onesignal?.identify?.(_userId, _traits);
+    if (this.ctx.getToggles().gamification) gamification?.identify?.(_userId, _traits);
+    if (this.ctx.getToggles().identity) identity?.identify?.(_userId, _traits);
 
     if (!snowplowEnabled) {
       // Snowplow disabled => queue identify only.
@@ -74,6 +86,13 @@ export class EventRouter {
     // Snowplow enabled => flush identify queue before processing live events.
     this.flushIdentifyQueue(snowplow);
     snowplow?.identify?.(_userId, _traits);
+  }
+
+  reset(): void {
+    if (this.ctx.getToggles().snowplow) this.plugins.get("snowplow")?.reset?.();
+    if (this.ctx.getToggles().onesignal) this.plugins.get("onesignal")?.reset?.();
+    if (this.ctx.getToggles().gamification) this.plugins.get("gamification")?.reset?.();
+    if (this.ctx.getToggles().identity) this.plugins.get("identity")?.reset?.();
   }
 
   private enqueueIdentify(entry: { userId: string; traits?: Record<string, unknown> }): void {

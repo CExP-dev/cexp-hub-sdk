@@ -2,6 +2,7 @@ import type { IntegrationToggles } from "../types";
 import type { IntegrationKey } from "../config/schema";
 import type { HubContext, Plugin } from "../plugins/types";
 import { createSpaPageView, DEFAULT_SPA_PAGE_DEBOUNCE_MS } from "./SpaPageView";
+import { IdentityStore } from "./IdentityStore";
 
 const DEFAULT_TOGGLES: IntegrationToggles = {
   snowplow: false,
@@ -53,7 +54,7 @@ export interface HubOptions {
  */
 export class Hub {
   private readonly plugins = new Map<string, Plugin>();
-  private readonly anonymousId: string | null;
+  private readonly anonymousIdOverride: string | null | undefined;
 
   private initialized = false;
   private currentToggles: IntegrationToggles | undefined;
@@ -61,7 +62,7 @@ export class Hub {
   private spaHandle?: ReturnType<typeof createSpaPageView>;
 
   constructor(options: HubOptions = {}) {
-    this.anonymousId = options.anonymousId ?? null;
+    this.anonymousIdOverride = options.anonymousId;
 
     const overrides = options.pluginOverrides ?? {};
     for (const integrationKey of PLUGIN_ORDER) {
@@ -104,6 +105,22 @@ export class Hub {
 
   getPlugin(name: string): Plugin | undefined {
     return this.plugins.get(name);
+  }
+
+  getPlugins(): Map<string, Plugin> {
+    return this.plugins;
+  }
+
+  getContext(): HubContext {
+    return {
+      // Important: read toggles at call time to avoid stale closure state after `setToggles()`.
+      getToggles: () => this.currentToggles ?? DEFAULT_TOGGLES,
+      getAnonymousId: () => {
+        if (typeof this.anonymousIdOverride === "string") return this.anonymousIdOverride;
+        return IdentityStore.getOrCreateFptUuid();
+      },
+      getUserId: () => null,
+    };
   }
 
   /**
@@ -150,13 +167,5 @@ export class Hub {
     }
   }
 
-  private getContext(): HubContext {
-    return {
-      // Important: read toggles at call time to avoid stale closure state after `setToggles()`.
-      getToggles: () => this.currentToggles ?? DEFAULT_TOGGLES,
-      getAnonymousId: () => this.anonymousId,
-      getUserId: () => null,
-    };
-  }
 }
 
