@@ -100,7 +100,7 @@ cexp-hub-sdk/
       gamification/
         GamificationPlugin.ts      # Task 11
   examples/                        # Optional smoke-test HTML
-  .github/workflows/ci.yml         # Task 14
+  .github/workflows/ci.yml         # Task 14 ✓
 ```
 
 **Build outputs:** ESM + IIFE bundle for CDN (`cexp-hub.min.js`) exposing `window.CExP`.
@@ -339,15 +339,15 @@ OneSignalDeferred embed pattern (used internally by the plugin, not by consumer)
 
 ---
 
-### Task 14: CI and quality gate
+### Task 14: CI and quality gate ✓
 
 **Files:**
 
 - Create: `.github/workflows/ci.yml` (optional)
 - Create: `eslint.config.js` (optional)
 
-- [ ] **Step 1:** CI runs `npm test` + `npm run build`.
-- [ ] **Step 2:** Commit: `ci: test and build workflow`
+- [x] **Step 1:** CI runs `npm test` + `npm run build`.
+- [x] **Step 2:** Commit: `ci: test and build workflow`
 
 ---
 
