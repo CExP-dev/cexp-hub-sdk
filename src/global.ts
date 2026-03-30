@@ -7,7 +7,9 @@ import { SnowplowPlugin } from "./plugins/snowplow/SnowplowPlugin";
 import { OneSignalPlugin } from "./plugins/onesignal/OneSignalPlugin";
 import { GamificationPlugin } from "./plugins/gamification/GamificationPlugin";
 
-const DEFAULT_VERSION = "0.1.0";
+import packageJson from "../package.json";
+
+const DEFAULT_VERSION = (packageJson as { version?: string }).version ?? "0.0.0";
 
 export function createCExP(): CExPApi {
   let initialized = false;
