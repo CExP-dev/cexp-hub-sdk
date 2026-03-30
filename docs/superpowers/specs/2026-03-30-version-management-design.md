@@ -18,12 +18,95 @@ The policy must preserve **integrate once (evergreen snippet)**: consumer pages 
 
 ## Principles
 
-| Principle | Meaning |
-| --- | --- |
-| **Evergreen consumer surface** | Snippet URL strategy is stable (e.g. org-controlled alias or pinned major); not “edit HTML every week.” |
-| **Hub SemVer** | `cexp-hub-sdk` version reflects **public API** and **hub compatibility** (breaking changes → major, etc.). |
-| **Hybrid vendor pins** | **Security- and behavior-sensitive** pins live in **hub code** (reviewed releases). **Safe, semver-stable** knobs may be **remote** when explicitly supported and validated. |
-| **Backward-compatible control JSON** | Unknown fields ignored; new optional keys added; existing consumers of the API keep working. |
+
+| Principle                            | Meaning                                                                                                                                                                      |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Evergreen consumer surface**       | Snippet URL strategy is stable (e.g. org-controlled alias or pinned major); not “edit HTML every week.”                                                                      |
+| **Hub SemVer**                       | `cexp-hub-sdk` version reflects **public API** and **hub compatibility** (breaking changes → major, etc.).                                                                   |
+| **Hybrid vendor pins**               | **Security- and behavior-sensitive** pins live in **hub code** (reviewed releases). **Safe, semver-stable** knobs may be **remote** when explicitly supported and validated. |
+| **Backward-compatible control JSON** | Unknown fields ignored; new optional keys added; existing consumers of the API keep working.                                                                                 |
+
+Diagrams use [Mermaid](https://mermaid.js.org/); render in GitHub, VS Code (preview), or any Mermaid-compatible viewer.
+
+---
+
+## Diagrams
+
+### System context: who owns “version”
+
+High-level view: **consumer HTML stays stable**; **hub SemVer** and **vendor pins** are platform-owned; **control JSON** can tune safe remote fields.
+
+```mermaid
+flowchart TB
+  subgraph consumer [Consumer site — evergreen]
+    HTML[Stable script URL + CExP.init]
+  end
+
+  subgraph hubPkg [cexp-hub-sdk — SemVer npm / CDN]
+    CExP[window.CExP facade]
+    Plugins[Internal plugins]
+  end
+
+  subgraph control [CExP platform — control API]
+    CFG[JSON: toggles + optional integration config]
+    Vcfg["version number (config identity, not npm)"]
+  end
+
+  subgraph vendors [Vendor scripts — lazy-loaded]
+    V1[cdp.js / Snowplow / OneSignal URLs…]
+    V2[cexp-gamification@semver]
+  end
+
+  HTML --> CExP
+  CExP --> CFG
+  CFG --> Vcfg
+  CExP --> Plugins
+  Plugins --> V1
+  Plugins --> V2
+```
+
+### Version layers (stack)
+
+```mermaid
+flowchart TB
+  L1["Layer 1: Hub package SemVer (package.json / CExP.version)"]
+  L2a["Layer 2a: Hub-pinned vendor URLs (identity, Snowplow script, OneSignal SDK)"]
+  L2b["Layer 2b: Remote-config knobs (e.g. gamification packageVersion + apiKey)"]
+  L3["Layer 3: Control API version field (ETag / change detection)"]
+
+  L1 --> L2a
+  L1 --> L2b
+  L3 --> L2b
+```
+
+### Hybrid split: hub release vs backend-only change
+
+```mermaid
+flowchart TD
+  Q[Vendor or integration change]
+  Q --> H{Breaking API, new script host, or hub logic change?}
+  H -->|Yes| R1[New cexp-hub-sdk release + CI + deploy npm/CDN]
+  H -->|No| Q2{Only safe remote fields e.g. gamification semver?}
+  Q2 -->|Yes + wired| R2[Update control API config for sdkId — optional: no hub release]
+  Q2 -->|No / not wired| R1
+```
+
+### Operational playbook (three paths)
+
+```mermaid
+flowchart LR
+  subgraph p1 [Path 1 — Gamification semver]
+    A1[Backend sets packageVersion / apiKey] --> A2[Hub applies after fetch]
+  end
+
+  subgraph p2 [Path 2 — Hub-pinned URL change]
+    B1[Edit constants in repo] --> B2[Hub release + tests]
+  end
+
+  subgraph p3 [Path 3 — Public CExP API]
+    C1[SemVer + changelog] --> C2[Publish]
+  end
+```
 
 ---
 
@@ -106,6 +189,7 @@ The existing **`version` number** on control JSON is for **config identity / cha
 
 ## Approval
 
-- [ ] Product / platform owner agrees with **hub-pinned vs remote** split.
-- [ ] Backend team agrees on **control JSON** shape for optional gamification fields.
-- [ ] Ready for implementation plan (`writing-plans`).
+- Product / platform owner agrees with **hub-pinned vs remote** split.
+- Backend team agrees on **control JSON** shape for optional gamification fields.
+- Ready for implementation plan (`writing-plans`).
+
