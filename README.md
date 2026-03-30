@@ -64,6 +64,18 @@ Do not use implementation globals in app code:
 
 Integrations and plugin internals are SDK-managed and may change independently.
 
+## Evergreen vs Vendor Updates
+
+### What is evergreen
+
+Evergreen means consumers never change the SDK script (host/path or URL) after integration. Your integration code stays stable while the hub updates runtime behavior.
+
+### What changes with vendor updates
+
+With vendor updates, the hub can update safe integration “knobs” via backend control configuration (for example, gamification `packageVersion`).
+
+If the hub needs to change the pinned script host/path itself, that requires a new hub release (consumers should update by pulling the new hub release, not by editing their app’s integration code).
+
 ## Build
 
 - Install deps: `npm install`

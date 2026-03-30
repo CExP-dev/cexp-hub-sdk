@@ -1,48 +1,63 @@
 import { describe, it, expect, vi } from "vitest";
 
 import { Hub } from "../src/hub/Hub";
+import type { ControlConfig } from "../src/config/schema";
 import type { IntegrationToggles } from "../src/types";
 import type { Plugin } from "../src/plugins/types";
 
 describe("Hub plugin registry + lifecycle", () => {
-  it("calls plugin.onToggle(false) then plugin.onToggle(true) on toggle changes", () => {
-    const onToggle = vi.fn();
+  it("passes per-integration config to plugin.init and re-inits gamification on config change", async () => {
     const init = vi.fn();
+    const onToggle = vi.fn();
 
-    const snowplowPlugin: Plugin = {
-      name: "snowplow",
-      init: () => {
-        init();
+    const gamificationPlugin: Plugin = {
+      name: "gamification",
+      init: (_ctx, config) => {
+        init(config);
       },
       onToggle,
     };
 
     const hub = new Hub({
-      pluginOverrides: { snowplow: snowplowPlugin },
+      pluginOverrides: { gamification: gamificationPlugin },
       anonymousId: "anon-1",
     });
 
-    const disabled: IntegrationToggles = {
-      snowplow: false,
-      onesignal: false,
-      gamification: false,
-      identity: false,
+    const c1: ControlConfig = {
+      version: 1,
+      integrations: {
+        snowplow: { enabled: false },
+        onesignal: { enabled: false },
+        identity: { enabled: false },
+        gamification: { enabled: true, packageVersion: "1.0.1-beta.9", apiKey: "k1" },
+      },
     };
 
-    const enabled: IntegrationToggles = {
-      ...disabled,
-      snowplow: true,
+    const c2: ControlConfig = {
+      version: 2,
+      integrations: {
+        snowplow: { enabled: false },
+        onesignal: { enabled: false },
+        identity: { enabled: false },
+        gamification: { enabled: true, packageVersion: "1.0.1-beta.10", apiKey: "k1" },
+      },
     };
 
-    hub.setToggles(disabled);
-    hub.setToggles(enabled);
+    await hub.setControlConfig(c1);
+    await hub.setControlConfig(c2);
 
-    expect(onToggle.mock.calls).toEqual([[false], [true]]);
-    expect(init).toHaveBeenCalledTimes(1);
+    expect(init.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(init.mock.calls[0]![0]).toMatchObject(c1.integrations.gamification);
+    expect(init.mock.calls[1]![0]).toMatchObject(c2.integrations.gamification);
+
+    // First sync: enabled -> onToggle(true)
+    // Second sync: config changed while enabled -> onToggle(false) then onToggle(true)
+    expect(onToggle.mock.calls.map((c) => c[0])).toEqual([true, false, true]);
   });
 
-  it("keeps ctx.getToggles live after subsequent hub.setToggles updates", () => {
+  it("keeps ctx.getToggles live after subsequent hub.setControlConfig updates", async () => {
     let getTogglesFn: (() => IntegrationToggles) | undefined;
+    const snowplowOnToggle = vi.fn();
 
     const snowplowPlugin: Plugin = {
       name: "snowplow",
@@ -50,7 +65,7 @@ describe("Hub plugin registry + lifecycle", () => {
         // Capture the function reference during init. It must remain live and reflect later updates.
         getTogglesFn = ctx.getToggles;
       },
-      onToggle: vi.fn(),
+      onToggle: snowplowOnToggle,
     };
 
     const hub = new Hub({
@@ -58,23 +73,44 @@ describe("Hub plugin registry + lifecycle", () => {
       anonymousId: "anon-1",
     });
 
-    const disabled: IntegrationToggles = {
+    const c1: ControlConfig = {
+      version: 1,
+      integrations: {
+        snowplow: { enabled: false },
+        onesignal: { enabled: false },
+        identity: { enabled: false },
+        gamification: { enabled: false },
+      },
+    };
+
+    const c2: ControlConfig = {
+      version: 2,
+      integrations: {
+        snowplow: { enabled: true },
+        onesignal: { enabled: false },
+        identity: { enabled: false },
+        gamification: { enabled: false },
+      },
+    };
+
+    await hub.setControlConfig(c1);
+    expect(getTogglesFn).toBeDefined();
+    const fnRef = getTogglesFn!;
+    expect(fnRef()).toEqual({
       snowplow: false,
       onesignal: false,
       gamification: false,
       identity: false,
-    };
+    });
 
-    const enabled: IntegrationToggles = {
-      ...disabled,
+    await hub.setControlConfig(c2);
+    expect(fnRef).toBe(getTogglesFn);
+    expect(fnRef()).toEqual({
       snowplow: true,
-    };
-
-    hub.setToggles(disabled);
-    hub.setToggles(enabled);
-
-    expect(getTogglesFn).toBeDefined();
-    expect(getTogglesFn!()).toEqual(enabled);
+      onesignal: false,
+      gamification: false,
+      identity: false,
+    });
   });
 });
 

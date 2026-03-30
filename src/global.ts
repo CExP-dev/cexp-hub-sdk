@@ -69,30 +69,44 @@ export function createCExP(): CExPApi {
       });
       router = new EventRouter({ ctx: hub.getContext(), plugins: hub.getPlugins() });
 
-      const applyConfig = () => {
-        if (!controlService || !hub || !router) return;
-        const toggles = controlService.getToggles();
-        if (!toggles) return;
-        hub.setToggles(toggles);
-        if (toggles.snowplow) {
-          hub.enableSpaPageView((props) => router?.page(props));
-        } else {
-          hub.disableSpaPageView();
-        }
+      let applyConfigChain: Promise<void> = Promise.resolve();
+      const applyConfig = async () => {
+        applyConfigChain = applyConfigChain
+          .then(async () => {
+            if (!controlService || !hub || !router) return;
+
+            const config = controlService.getConfig();
+            if (!config) return;
+
+            await hub.setControlConfig(config);
+
+            // SPA page-view integration is controlled only by snowplow enabled flag.
+            if (config.integrations.snowplow.enabled) {
+              hub.enableSpaPageView((props) => router?.page(props));
+            } else {
+              hub.disableSpaPageView();
+            }
+          })
+          .catch(() => {
+            // Keep config application chain alive on transient failures.
+          });
+
+        return applyConfigChain;
       };
 
       controlService = new ControlService({
         sdkId: options.id,
         onUpdate: () => {
-          applyConfig();
+          void applyConfig();
         },
       });
 
       initialized = true;
       initId = options.id;
-      void controlService.syncOnce().finally(() => {
+      void (async () => {
+        await controlService.syncOnce();
+        await applyConfig();
         firstConfigResolved = true;
-        applyConfig();
 
         // Flush in call order through normal routing pipeline.
         while (preInitQueue.length > 0) {
@@ -102,7 +116,7 @@ export function createCExP(): CExPApi {
         }
 
         controlService?.startPolling(300_000);
-      });
+      })();
     },
 
     track: (event: unknown, props?: Record<string, unknown>) => {

@@ -167,6 +167,42 @@ describe("ControlService", () => {
     });
   });
 
+  it("calls onUpdate when integration config changes but enabled toggles stay the same", async () => {
+    const body1 = {
+      version: 1,
+      integrations: {
+        gamification: { enabled: true, packageVersion: "1.0.1-beta.9", apiKey: "k1" },
+        snowplow: { enabled: false },
+        onesignal: { enabled: false },
+        identity: { enabled: false },
+      },
+    };
+
+    const body2 = {
+      version: 1,
+      integrations: {
+        gamification: { enabled: true, packageVersion: "1.0.1-beta.10", apiKey: "k1" },
+        snowplow: { enabled: false },
+        onesignal: { enabled: false },
+        identity: { enabled: false },
+      },
+    };
+
+    fetchMock.mockResolvedValueOnce(
+      mockFetchResponse({ status: 200, etag: '"v1"', body: body1 }) as any
+    );
+    fetchMock.mockResolvedValueOnce(
+      mockFetchResponse({ status: 200, etag: '"v2"', body: body2 }) as any
+    );
+
+    const svc = new ControlService({ controlUrl, onUpdate: updateSpy });
+
+    await svc.syncOnce();
+    await svc.syncOnce();
+
+    expect(updateSpy).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps previous state on non-200 response and does not call onUpdate", async () => {
     const firstBody = makeControlBody({ version: 10, snowplow: true });
     const parsedFirst: ControlConfig = {

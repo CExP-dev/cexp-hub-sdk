@@ -100,5 +100,37 @@ describe("parseControlConfig schema safety", () => {
       },
     });
   });
+
+  it("preserves allowed per-integration config fields for remote overrides", () => {
+    const parsed = parseControlConfig({
+      version: 2,
+      integrations: {
+        gamification: { enabled: true, packageVersion: "1.0.1-beta.10", apiKey: "k_123" },
+        identity: { enabled: false },
+      },
+    });
+
+    expect(parsed).toEqual({
+      version: 2,
+      integrations: {
+        gamification: { enabled: true, packageVersion: "1.0.1-beta.10", apiKey: "k_123" },
+        snowplow: { enabled: false },
+        onesignal: { enabled: false },
+        identity: { enabled: false },
+      },
+    });
+  });
+
+  it("ignores invalid gamification.packageVersion inputs", () => {
+    const parsed = parseControlConfig({
+      version: 1,
+      integrations: {
+        gamification: { enabled: true, packageVersion: "1.0.0/evil", apiKey: "k_123" },
+        identity: { enabled: false },
+      },
+    });
+
+    expect(parsed.integrations.gamification).toEqual({ enabled: true, apiKey: "k_123" });
+  });
 });
 

@@ -44,6 +44,18 @@ CExP.track("page_loaded", { section: "home" });
 
 Pin a specific package version for predictable behavior in production.
 
+## Evergreen vs Vendor Updates
+
+### What is evergreen
+
+Evergreen means consumers never change the SDK script (host/path or URL) after integration. Once your application is deployed, you should not update the script tag or CDN path to pick up backend changes.
+
+### What changes with vendor updates
+
+When vendors update, the hub can safely change backend control configuration “knobs” that preserve integration compatibility (for example, gamification `packageVersion`).
+
+If the hub needs to change the pinned script host/path itself, that requires a new hub release. In that case, consumers still keep their integration code unchanged, but you must pull the updated hub release that provides the new script URL.
+
 ## Integration Rules
 
 1. Call `CExP.init({ id })` once, as early as possible.

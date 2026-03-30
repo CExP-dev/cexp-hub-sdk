@@ -1,5 +1,5 @@
 import type { IntegrationToggles } from "../types";
-import type { IntegrationKey } from "../config/schema";
+import type { ControlConfig, IntegrationKey } from "../config/schema";
 import type { HubContext, Plugin } from "../plugins/types";
 import { createSpaPageView, DEFAULT_SPA_PAGE_DEBOUNCE_MS } from "./SpaPageView";
 import { IdentityStore } from "./IdentityStore";
@@ -56,6 +56,7 @@ export class Hub {
   private readonly plugins = new Map<string, Plugin>();
   private readonly anonymousIdOverride: string | null | undefined;
 
+  private currentControlConfig: ControlConfig | undefined;
   private initialized = false;
   private currentToggles: IntegrationToggles | undefined;
 
@@ -89,17 +90,114 @@ export class Hub {
     const prev = this.currentToggles;
     this.currentToggles = next;
 
-    this.ensureInitialized();
+    // Keep ControlConfig-like state in sync for ctx.getToggles() consumers.
+    // Note: this does NOT trigger plugin.init; only setControlConfig() does that.
+    this.currentControlConfig = {
+      version: this.currentControlConfig?.version ?? 0,
+      integrations: {
+        snowplow: { enabled: next.snowplow },
+        onesignal: { enabled: next.onesignal },
+        identity: { enabled: next.identity },
+        gamification: { enabled: next.gamification },
+      },
+    };
 
-    // Call onToggle for each plugin that changed (including initial sync).
+    // If plugins were initialized via setControlConfig(), allow setToggles() to
+    // propagate onToggle changes without re-initializing.
+    if (this.initialized && prev) {
+      for (const integrationKey of PLUGIN_ORDER) {
+        const plugin = this.plugins.get(integrationKey);
+        if (!plugin) continue;
+        const prevEnabled = prev[integrationKey];
+        const enabled = next[integrationKey];
+        if (prevEnabled !== enabled) plugin.onToggle(enabled);
+      }
+    }
+  }
+
+  /**
+   * Apply remote control config and initialize/re-initialize plugins as needed.
+   */
+  async setControlConfig(next: ControlConfig): Promise<void> {
+    const prevControlConfig = this.currentControlConfig;
+    const prevGamification = prevControlConfig?.integrations.gamification;
+
+    this.currentControlConfig = next;
+    this.currentToggles = this.deriveTogglesFromControlConfig(next);
+
+    const ctx = this.getContext();
+
+    // First-time init: init *all* plugins in deterministic order before enabling any.
+    if (!this.initialized) {
+      for (const integrationKey of PLUGIN_ORDER) {
+        const plugin = this.plugins.get(integrationKey);
+        if (!plugin) continue;
+        await plugin.init(ctx, next.integrations[integrationKey] ?? { enabled: false });
+      }
+
+      for (const integrationKey of PLUGIN_ORDER) {
+        const plugin = this.plugins.get(integrationKey);
+        if (!plugin) continue;
+        const enabled = next.integrations[integrationKey].enabled;
+        if (enabled) plugin.onToggle(true);
+      }
+
+      this.initialized = true;
+      return;
+    }
+
+    // Subsequent updates:
+    // - non-gamification: only onToggle when enabled flag changes
+    // - gamification:
+    //   - false -> true: init then onToggle(true)
+    //   - true -> true with cfg change: init then onToggle(false) then onToggle(true)
+    //   - false -> false with cfg change: optional init-only refresh
     for (const integrationKey of PLUGIN_ORDER) {
       const plugin = this.plugins.get(integrationKey);
       if (!plugin) continue;
-      const prevEnabled = prev ? prev[integrationKey] : undefined;
-      const enabled = next[integrationKey];
-      if (prevEnabled !== enabled) {
-        plugin.onToggle(enabled);
+
+      if (integrationKey === "gamification") {
+        if (!prevGamification) continue; // should not happen once initialized is true
+
+        const prevEnabled = prevGamification.enabled;
+        const nextGamification = next.integrations.gamification;
+        const nextEnabled = nextGamification.enabled;
+
+        if (prevEnabled !== nextEnabled) {
+          if (!prevEnabled && nextEnabled) {
+            await plugin.init(ctx, nextGamification ?? { enabled: false });
+            plugin.onToggle(true);
+          } else {
+            plugin.onToggle(false);
+          }
+          continue;
+        }
+
+        // enabled didn't change
+        if (nextEnabled) {
+          const apiKeyChanged = prevGamification.apiKey !== nextGamification.apiKey;
+          const packageVersionChanged = prevGamification.packageVersion !== nextGamification.packageVersion;
+          if (apiKeyChanged || packageVersionChanged) {
+            await plugin.init(ctx, nextGamification ?? { enabled: false });
+            plugin.onToggle(false);
+            plugin.onToggle(true);
+          }
+        } else {
+          // Optional refresh: keep the config up to date for the next enable transition.
+          const apiKeyChanged = prevGamification.apiKey !== nextGamification.apiKey;
+          const packageVersionChanged = prevGamification.packageVersion !== nextGamification.packageVersion;
+          if (apiKeyChanged || packageVersionChanged) {
+            await plugin.init(ctx, nextGamification ?? { enabled: false });
+          }
+        }
+
+        continue;
       }
+
+      // Non-gamification integration
+      const prevEnabled = prevControlConfig!.integrations[integrationKey].enabled;
+      const enabled = next.integrations[integrationKey].enabled;
+      if (prevEnabled !== enabled) plugin.onToggle(enabled);
     }
   }
 
@@ -155,16 +253,13 @@ export class Hub {
     this.spaHandle?.notifyExplicitPage();
   }
 
-  private ensureInitialized(): void {
-    if (this.initialized) return;
-    this.initialized = true;
-
-    const ctx = this.getContext();
-    for (const integrationKey of PLUGIN_ORDER) {
-      const plugin = this.plugins.get(integrationKey);
-      if (!plugin) continue;
-      plugin.init(ctx, {});
-    }
+  private deriveTogglesFromControlConfig(cfg: ControlConfig): IntegrationToggles {
+    return {
+      snowplow: cfg.integrations.snowplow.enabled,
+      onesignal: cfg.integrations.onesignal.enabled,
+      gamification: cfg.integrations.gamification.enabled,
+      identity: cfg.integrations.identity.enabled,
+    };
   }
 
 }
