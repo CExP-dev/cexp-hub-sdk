@@ -38,6 +38,7 @@ When config is available and the request does not match the current `ETag`, resp
   - `content-type: application/json`
   - `etag: <current-etag>`
   - (optional) `cache-control: no-store`
+- If the request does not include `If-None-Match`, treat it as a mismatch and respond with `200`.
 - Body: a single JSON object shaped as `ControlConfig`:
   ```json
   {
@@ -93,19 +94,29 @@ Implementation should:
 2. Watch the file for changes (fs-watch or a lightweight watcher)
 3. On change:
    - re-read and re-parse the JSON
-   - if parsing succeeds, replace the in-memory active config atomically
+   - if parsing succeeds, replace the in-memory active config snapshot atomically
    - if parsing fails, keep the last known-good config (do not crash)
+
+The snapshot MUST include both:
+- the exact response body serialization (string/bytes), and
+- the derived `etag` string,
+
+so each request reads a single consistent `(etag, body)` pair.
 
 ### Validation expectations (align with SDK)
 The server SHOULD validate the config file to fail fast (optional), but it MUST NOT emit payloads that violate SDK parsing invariants.
 
+For `gamification` remote knobs, remember that `tryParseControlConfig()` sanitizes invalid optional fields instead of failing parsing. The mock server may:
+- omit optional fields when the config file provides invalid/empty values, or
+- return them and rely on the SDK sanitization.
+
 In practice, the file should always include:
 - `version` as a finite number
-- `integrations` as an object with the four known integration blocks
+- `integrations` as an object with the four known integration blocks (if missing, the server may fill defaults with `enabled: false`)
 - `enabled` as boolean
 - for `gamification`:
-  - `apiKey` if provided must be a non-empty string (SDK trims + validates)
-  - `packageVersion` if provided must be allowlisted by the SDK parser (disallow `/` and whitespace)
+  - `apiKey` is optional (if present but empty/invalid, it can be omitted from the server response)
+  - `packageVersion` is optional (if present but invalid/unallowlisted/too long, it can be omitted from the server response)
 
 ---
 
@@ -113,10 +124,26 @@ In practice, the file should always include:
 To ensure the SDK’s polling detects changes correctly:
 - The server computes the `ETag` from the exact JSON response string that it would send on a `200`.
 - ETag MUST change when any relevant field changes (including `gamification.packageVersion` / `gamification.apiKey`).
+- The mock MUST treat the incoming/outgoing `ETag` values as opaque strings:
+  - The `etag` response header value is compared byte-for-byte to the raw `If-None-Match` header value from the request.
+  - ETag formatting (including quoting) is not normalized.
 
 Implementation guidance:
 - Derive `etag` as a stable hash of the response body.
 - Prefer canonicalizing the response string (e.g. stable stringify) so key ordering changes in the config file do not accidentally alter ETag semantics.
+- The server MUST return as the HTTP response body the exact same serialized string/bytes used to compute the `etag`.
+
+## SDK-parsing alignment (what must be true for `200`)
+`cexp-hub-sdk` applies `tryParseControlConfig()` to decide whether to accept a control payload. Therefore, the server MUST ensure that every `200` response body is strict-parseable by `tryParseControlConfig()`:
+- the top-level JSON value is a plain object
+- `integrations` is a plain object
+- each integration block present in the response is a plain object
+- each integration block’s `enabled` value is a JSON boolean
+- for `gamification`:
+  - `apiKey` and `packageVersion` are optional inputs; if they are invalid, `tryParseControlConfig()` sanitizes them (treating them as absent) rather than failing the whole parse
+  - the only hard structural requirements are `gamification` being a plain object and `gamification.enabled` being a boolean
+
+To avoid ETag/body changes that don’t translate into SDK state changes, the server SHOULD compute the response JSON (and ETag) from the normalized/sanitized values it plans to return (i.e., omit optional gamification fields when they are invalid/empty).
 
 ---
 
@@ -127,8 +154,8 @@ Implementation guidance:
 
 ### Error handling
 - If the config file cannot be parsed at startup and no last-known-good config exists:
-  - respond with `500` for control requests (recommended) OR respond with an all-disabled fallback config
-  - document which behavior is chosen
+  - respond with an all-disabled fallback config for `200` responses (`version: 0`, all `enabled: false`)
+  - still compute an `etag` for that fallback and continue to support `304`
 - For transient parse errors after startup:
   - keep last-known-good config
 
@@ -158,7 +185,7 @@ Example manual verification:
 ---
 
 ## Open questions
-1. Startup failure behavior when the config file is invalid (500 vs disabled fallback).
+None.
 
 ---
 
