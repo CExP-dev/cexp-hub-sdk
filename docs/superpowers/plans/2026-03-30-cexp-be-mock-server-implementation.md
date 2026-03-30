@@ -110,16 +110,22 @@ Implement:
 1. `loadConfigFromFile.ts`:
    - reads file contents
    - parses JSON
-   - sanitizes/normalizes gamification optional fields to match `tryParseControlConfig()` semantics:
-     - `apiKey`: included only if `typeof string` and trimmed result is non-empty
-     - `packageVersion`: included only if it matches regex `^[0-9A-Za-z][0-9A-Za-z+._-]*$` and length <= `128`
-   - ensures all integrations blocks exist; if missing, fill with `{ enabled: false }`
+   - validates/normalizes to ensure the server NEVER emits a payload that fails the SDK’s `tryParseControlConfig()` invariants:
+     - `version` must be a finite number (otherwise treat reload as failure)
+     - `integrations` must be a plain object (otherwise treat reload as failure)
+     - for each integration key:
+       - if the block is missing: treat as disabled (`enabled: false`)
+       - if present: must be a plain object
+       - `enabled` must be a JSON boolean (otherwise treat reload as failure)
+     - for `gamification` only:
+       - `apiKey`: include only if it is a string whose trimmed value is non-empty; otherwise omit
+       - `packageVersion`: include only if it matches regex `^[0-9A-Za-z][0-9A-Za-z+._-]*$` and length <= `128`; otherwise omit
 2. `configWatcher.ts`:
    - initial load into an in-memory snapshot
    - uses `fs.watch` to detect changes
    - debounces file changes (e.g. 100-250ms)
    - on valid reload: atomically swap the snapshot used by the handler
-   - on parse failure: keep last-known-good snapshot
+   - on reload failure (JSON parse error and/or invariant validation failure): keep last-known-good snapshot
 3. Wire the watcher into `createApp.ts` so request handlers read from the latest snapshot (atomic reference swap).
 
 Reload semantics:
@@ -198,9 +204,13 @@ Test:
 4. Wait a moment for watcher.
 5. Request again; assert it still returns the old `etagStable` and `bodyStable` (or at least parses and matches prior snapshot).
 
+6. Overwrite config file with valid JSON that violates invariants (example: `"version": "1"` or `"enabled": "false"` as a string).
+7. Wait a moment for watcher.
+8. Request again; assert `etagStable` and `bodyStable` are unchanged.
+
 - [ ] **Step 2: Run tests to verify it fails**
 - [ ] **Step 3: Implement minimal code**
-Implementation: watcher must catch parse errors and keep last-known-good snapshot.
+Implementation: watcher must catch both JSON parse errors and invariant validation failures, and keep last-known-good snapshot.
 - [ ] **Step 4: Run tests to verify they pass**
 - [ ] **Step 5: Commit**
 
