@@ -111,8 +111,11 @@ Implement:
    - reads file contents
    - parses JSON
    - validates/normalizes to ensure the server NEVER emits a payload that fails the SDK’s `tryParseControlConfig()` invariants:
+     - parsed JSON must be a non-null plain object (reject arrays/primitives)
      - `version` must be a finite number (otherwise treat reload as failure)
      - `integrations` must be a plain object (otherwise treat reload as failure)
+     - unknown integration keys must be ignored; emitted response must include only:
+       - `snowplow`, `onesignal`, `gamification`, `identity`
      - for each integration key:
        - if the block is missing: treat as disabled (`enabled: false`)
        - if present: must be a plain object
@@ -201,16 +204,22 @@ Test:
 1. Start server with valid config.
 2. Make a request capture `etagStable` and `bodyStable`.
 3. Overwrite config file with invalid JSON (e.g. `{ invalid`).
-4. Wait a moment for watcher.
-5. Request again; assert it still returns the old `etagStable` and `bodyStable` (or at least parses and matches prior snapshot).
+4. Wait a moment for watcher (use a small retry loop until the request completes).
+5. Request again; assert it still returns the old `etagStable` and the exact same response body used in the initial snapshot.
 
 6. Overwrite config file with valid JSON that violates invariants (example: `"version": "1"` or `"enabled": "false"` as a string).
-7. Wait a moment for watcher.
+7. Wait a moment for watcher (retry loop).
 8. Request again; assert `etagStable` and `bodyStable` are unchanged.
+
+9. Add one more “valid JSON but invalid container shape” overwrite (examples):
+   - `"integrations": []` or `"integrations": "nope"`
+   - `"gamification": null` or `"gamification": []`
+10. Wait a moment for watcher (retry loop).
+11. Request again; assert `etagStable` and `bodyStable` are unchanged.
 
 - [ ] **Step 2: Run tests to verify it fails**
 - [ ] **Step 3: Implement minimal code**
-Implementation: watcher must catch both JSON parse errors and invariant validation failures, and keep last-known-good snapshot.
+Implementation: watcher must catch both JSON parse errors and invariant validation failures (including invalid container shapes/types), and keep last-known-good snapshot.
 - [ ] **Step 4: Run tests to verify they pass**
 - [ ] **Step 5: Commit**
 
