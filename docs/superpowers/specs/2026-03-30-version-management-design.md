@@ -9,7 +9,7 @@
 
 Define a **best-practice, hybrid** policy for:
 
-1. **`cexp-hub-sdk` releases** (npm / CDN SemVer).
+1. `**cexp-hub-sdk` releases** (npm / CDN SemVer).
 2. **Vendor script / package versions** (Snowplow, OneSignal, identity `cdp.js`, gamification, etc.).
 
 The policy must preserve **integrate once (evergreen snippet)**: consumer pages keep a single stable integration pattern (`script` + `CExP.init({ id })`); **consumers do not** edit script URLs for every vendor bump. Platform teams move behavior via **hub releases** and/or **backwards-compatible control API** updates.
@@ -25,6 +25,7 @@ The policy must preserve **integrate once (evergreen snippet)**: consumer pages 
 | **Hub SemVer**                       | `cexp-hub-sdk` version reflects **public API** and **hub compatibility** (breaking changes → major, etc.).                                                                   |
 | **Hybrid vendor pins**               | **Security- and behavior-sensitive** pins live in **hub code** (reviewed releases). **Safe, semver-stable** knobs may be **remote** when explicitly supported and validated. |
 | **Backward-compatible control JSON** | Unknown fields ignored; new optional keys added; existing consumers of the API keep working.                                                                                 |
+
 
 Diagrams use [Mermaid](https://mermaid.js.org/); render in GitHub, VS Code (preview), or any Mermaid-compatible viewer.
 
@@ -65,6 +66,8 @@ flowchart TB
   Plugins --> V2
 ```
 
+
+
 ### Version layers (stack)
 
 ```mermaid
@@ -79,6 +82,8 @@ flowchart TB
   L3 --> L2b
 ```
 
+
+
 ### Hybrid split: hub release vs backend-only change
 
 ```mermaid
@@ -90,6 +95,8 @@ flowchart TD
   Q2 -->|Yes + wired| R2[Update control API config for sdkId — optional: no hub release]
   Q2 -->|No / not wired| R1
 ```
+
+
 
 ### Operational playbook (three paths)
 
@@ -108,6 +115,8 @@ flowchart LR
   end
 ```
 
+
+
 ---
 
 ## Layer 1: Hub package (`cexp-hub-sdk`)
@@ -120,7 +129,7 @@ flowchart LR
   - New or changed **initialization / teardown** logic for a plugin.
   - Compatibility shims for a vendor upgrade that cannot be expressed safely by config alone.
 
-**Release artifacts:** npm publish + `dist/` (ESM + IIFE); CDN consumers pin `cexp-hub-sdk@<version>` or use a **single stable URL** your team redirects to a tested version.
+**Release artifacts:** npm publish + `dist/` (ESM + IIFE); CDN consumers pin `cexp-hub-sdk@<version>` or use a **sing=le stable URL** your team redirects to a tested version.
 
 ---
 
@@ -160,7 +169,7 @@ Even in hybrid mode, a **new hub release** is required when:
 
 ## Layer 3: Control API `version` field
 
-The existing **`version` number** on control JSON is for **config identity / change detection** (with ETag), not npm SemVer. Keep it **monotonic** per platform convention. Hub **must** remain tolerant of unknown fields and treat missing integration blocks as safe defaults.
+The existing `**version` number** on control JSON is for **config identity / change detection** (with ETag), not npm SemVer. Keep it **monotonic** per platform convention. Hub **must** remain tolerant of unknown fields and treat missing integration blocks as safe defaults.
 
 ---
 
