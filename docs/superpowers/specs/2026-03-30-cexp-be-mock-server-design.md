@@ -115,7 +115,7 @@ In practice, the file should always include:
 - `integrations` as an object with the four known integration blocks (if missing, the server may fill defaults with `enabled: false`)
 - `enabled` as boolean
 - for `gamification`:
-  - `apiKey` is optional (if present but empty/invalid, it can be omitted from the server response)
+  - `apiKey` is optional (if present but empty/whitespace-only after trimming, it can be omitted from the server response)
   - `packageVersion` is optional (if present but invalid/unallowlisted/too long, it can be omitted from the server response)
 
 ---
@@ -140,7 +140,7 @@ Implementation guidance:
 - each integration block present in the response is a plain object
 - each integration block’s `enabled` value is a JSON boolean
 - for `gamification`:
-  - `apiKey` and `packageVersion` are optional inputs; if they are invalid, `tryParseControlConfig()` sanitizes them (treating them as absent) rather than failing the whole parse
+  - `apiKey` and `packageVersion` are optional inputs; if `apiKey` becomes empty after trimming or `packageVersion` is unallowlisted/too long, `tryParseControlConfig()` sanitizes them (treating them as absent) rather than failing the whole parse
   - the only hard structural requirements are `gamification` being a plain object and `gamification.enabled` being a boolean
 
 To avoid ETag/body changes that don’t translate into SDK state changes, the server SHOULD compute the response JSON (and ETag) from the normalized/sanitized values it plans to return (i.e., omit optional gamification fields when they are invalid/empty).
