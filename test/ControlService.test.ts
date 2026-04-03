@@ -4,19 +4,14 @@ import { ControlService } from "../src/hub/ControlService";
 import type { ControlConfig } from "../src/config/schema";
 
 const makeControlBody = (toggles: {
-  snowplow?: boolean;
   onesignal?: boolean;
   gamification?: boolean;
-  identity?: boolean;
   version?: number;
 }) => {
   const integrations: Record<string, { enabled: boolean }> = {};
-  if (typeof toggles.snowplow === "boolean") integrations.snowplow = { enabled: toggles.snowplow };
-  if (typeof toggles.onesignal === "boolean")
-    integrations.onesignal = { enabled: toggles.onesignal };
+  if (typeof toggles.onesignal === "boolean") integrations.onesignal = { enabled: toggles.onesignal };
   if (typeof toggles.gamification === "boolean")
     integrations.gamification = { enabled: toggles.gamification };
-  if (typeof toggles.identity === "boolean") integrations.identity = { enabled: toggles.identity };
 
   return {
     version: typeof toggles.version === "number" ? toggles.version : 1,
@@ -66,14 +61,12 @@ describe("ControlService", () => {
   });
 
   it("keeps previous state on 304 (no body) and updates stored ETag", async () => {
-    const firstBody = makeControlBody({ version: 10, snowplow: true });
+    const firstBody = makeControlBody({ version: 10, onesignal: true });
     const parsedFirst: ControlConfig = {
       version: 10,
       integrations: {
-        snowplow: { enabled: true },
-        onesignal: { enabled: false },
+        onesignal: { enabled: true },
         gamification: { enabled: false },
-        identity: { enabled: false },
       },
     };
 
@@ -140,8 +133,8 @@ describe("ControlService", () => {
   });
 
   it("updates toggles on 200 with new body and emits callback", async () => {
-    const body1 = makeControlBody({ version: 1, snowplow: true, onesignal: false });
-    const body2 = makeControlBody({ version: 2, snowplow: false, onesignal: true });
+    const body1 = makeControlBody({ version: 1, onesignal: true, gamification: false });
+    const body2 = makeControlBody({ version: 2, onesignal: false, gamification: true });
 
     fetchMock.mockResolvedValueOnce(mockFetchResponse({ status: 200, etag: '"v1"', body: body1 }) as any);
     fetchMock.mockResolvedValueOnce(mockFetchResponse({ status: 200, etag: '"v2"', body: body2 }) as any);
@@ -151,19 +144,15 @@ describe("ControlService", () => {
     await svc.syncOnce();
     expect(updateSpy).toHaveBeenCalledTimes(1);
     expect(svc.getToggles()).toEqual({
-      snowplow: true,
-      onesignal: false,
+      onesignal: true,
       gamification: false,
-      identity: false,
     });
 
     await svc.syncOnce();
     expect(updateSpy).toHaveBeenCalledTimes(2);
     expect(svc.getToggles()).toEqual({
-      snowplow: false,
-      onesignal: true,
-      gamification: false,
-      identity: false,
+      onesignal: false,
+      gamification: true,
     });
   });
 
@@ -172,9 +161,7 @@ describe("ControlService", () => {
       version: 1,
       integrations: {
         gamification: { enabled: true, packageVersion: "1.0.1-beta.9", apiKey: "k1" },
-        snowplow: { enabled: false },
         onesignal: { enabled: false },
-        identity: { enabled: false },
       },
     };
 
@@ -182,9 +169,7 @@ describe("ControlService", () => {
       version: 1,
       integrations: {
         gamification: { enabled: true, packageVersion: "1.0.1-beta.10", apiKey: "k1" },
-        snowplow: { enabled: false },
         onesignal: { enabled: false },
-        identity: { enabled: false },
       },
     };
 
@@ -204,14 +189,12 @@ describe("ControlService", () => {
   });
 
   it("keeps previous state on non-200 response and does not call onUpdate", async () => {
-    const firstBody = makeControlBody({ version: 10, snowplow: true });
+    const firstBody = makeControlBody({ version: 10, onesignal: true });
     const parsedFirst: ControlConfig = {
       version: 10,
       integrations: {
-        snowplow: { enabled: true },
-        onesignal: { enabled: false },
+        onesignal: { enabled: true },
         gamification: { enabled: false },
-        identity: { enabled: false },
       },
     };
 
@@ -245,14 +228,12 @@ describe("ControlService", () => {
   });
 
   it("keeps previous state when res.json throws on 200 and does not call onUpdate", async () => {
-    const firstBody = makeControlBody({ version: 10, snowplow: true });
+    const firstBody = makeControlBody({ version: 10, onesignal: true });
     const parsedFirst: ControlConfig = {
       version: 10,
       integrations: {
-        snowplow: { enabled: true },
-        onesignal: { enabled: false },
+        onesignal: { enabled: true },
         gamification: { enabled: false },
-        identity: { enabled: false },
       },
     };
 
@@ -279,14 +260,12 @@ describe("ControlService", () => {
   });
 
   it("keeps previous state when res.json returns invalid JSON on 200 and does not call onUpdate", async () => {
-    const firstBody = makeControlBody({ version: 10, snowplow: true });
+    const firstBody = makeControlBody({ version: 10, onesignal: true });
     const parsedFirst: ControlConfig = {
       version: 10,
       integrations: {
-        snowplow: { enabled: true },
-        onesignal: { enabled: false },
+        onesignal: { enabled: true },
         gamification: { enabled: false },
-        identity: { enabled: false },
       },
     };
 
@@ -334,14 +313,12 @@ describe("ControlService", () => {
   });
 
   it("keeps previous state on 200 with missing integrations and does not call onUpdate", async () => {
-    const firstBody = makeControlBody({ version: 10, snowplow: true });
+    const firstBody = makeControlBody({ version: 10, onesignal: true });
     const parsedFirst: ControlConfig = {
       version: 10,
       integrations: {
-        snowplow: { enabled: true },
-        onesignal: { enabled: false },
+        onesignal: { enabled: true },
         gamification: { enabled: false },
-        identity: { enabled: false },
       },
     };
 
@@ -389,14 +366,12 @@ describe("ControlService", () => {
   });
 
   it("keeps previous state on 200 with non-boolean enabled integration and does not call onUpdate", async () => {
-    const firstBody = makeControlBody({ version: 10, snowplow: true });
+    const firstBody = makeControlBody({ version: 10, onesignal: true });
     const parsedFirst: ControlConfig = {
       version: 10,
       integrations: {
-        snowplow: { enabled: true },
-        onesignal: { enabled: false },
+        onesignal: { enabled: true },
         gamification: { enabled: false },
-        identity: { enabled: false },
       },
     };
 
@@ -407,13 +382,13 @@ describe("ControlService", () => {
       body: {
         version: 11,
         integrations: {
-          snowplow: { enabled: "not-a-boolean" },
+          onesignal: { enabled: "not-a-boolean" },
         },
       },
       jsonImpl: async () => ({
         version: 11,
         integrations: {
-          snowplow: { enabled: "not-a-boolean" },
+          onesignal: { enabled: "not-a-boolean" },
         },
       }),
     });
@@ -473,7 +448,7 @@ describe("ControlService", () => {
     vi.advanceTimersByTime(100);
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    resolveFetch?.(mockFetchResponse({ status: 200, etag: '"v1"', body: makeControlBody({ version: 1, identity: true }) }));
+    resolveFetch?.(mockFetchResponse({ status: 200, etag: '"v1"', body: makeControlBody({ version: 1, gamification: true }) }));
 
     // Wait for the in-flight fetch to resolve, then allow async continuations to complete.
     await fetchPromise;
@@ -481,4 +456,3 @@ describe("ControlService", () => {
     svc.stopPolling();
   });
 });
-

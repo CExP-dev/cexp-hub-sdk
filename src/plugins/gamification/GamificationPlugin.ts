@@ -140,7 +140,7 @@ export class GamificationPlugin implements Plugin {
 
   page(_props: Record<string, unknown>): void {
     void _props;
-    // No documented page hook yet; Snowplow owns page_view for analytics.
+    // No documented page hook in this plugin yet; route-level analytics are not wired here.
   }
 
   identify(userId: string, traits?: Record<string, unknown>): void {

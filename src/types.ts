@@ -1,10 +1,8 @@
 export type InitOptions = { id: string };
 
 export type IntegrationToggles = {
-  snowplow: boolean;
   onesignal: boolean;
   gamification: boolean;
-  identity: boolean;
 };
 
 export interface CExPApi {
@@ -13,10 +11,5 @@ export interface CExPApi {
   page: (pageProps?: Record<string, unknown>) => void;
   identify: (userId: string, traits?: Record<string, unknown>) => void;
   reset: () => void;
-  /**
-   * Returns an anonymous id for the current runtime.
-   */
-  getAnonymousId?: () => string;
   version: string;
 }
-

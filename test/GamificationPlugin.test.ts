@@ -11,12 +11,9 @@ const scriptUrlForVersion = (v: string) =>
 function hubCtx() {
   return {
     getToggles: () => ({
-      snowplow: false,
       onesignal: false,
       gamification: true,
-      identity: false,
     }),
-    getAnonymousId: () => null,
     getUserId: () => null,
   };
 }

@@ -1,4 +1,8 @@
-import { areControlConfigsEqual, tryParseControlConfig, type ControlConfig } from "../config/schema";
+import {
+  areControlConfigsEqual,
+  tryParseControlConfig,
+  type ControlConfig,
+} from "../config/schema";
 
 export interface ControlServiceOptions {
   /**
@@ -22,7 +26,8 @@ export interface ControlServiceOptions {
   fetcher?: typeof fetch;
 }
 
-const DEFAULT_CONTROL_BASE_URL = "https://fixed-host.example";
+// const DEFAULT_CONTROL_BASE_URL = "https://fixed-host.example";
+const DEFAULT_CONTROL_BASE_URL = "http://localhost:3001";
 
 export class ControlService {
   private readonly controlUrl: string;
@@ -39,28 +44,36 @@ export class ControlService {
     const builtUrl =
       options.controlUrl ??
       (options.sdkId
-        ? `${(options.baseUrl ?? DEFAULT_CONTROL_BASE_URL).replace(/\/+$/, "")}/v1/sdk-config?sdkId=${encodeURIComponent(
-            options.sdkId,
-          )}`
+        ? `${(options.baseUrl ?? DEFAULT_CONTROL_BASE_URL).replace(
+            /\/+$/,
+            ""
+          )}/v1/sdk-config?sdkId=${encodeURIComponent(options.sdkId)}`
         : undefined);
 
+    // console.log("builtUrl", builtUrl);
     if (!builtUrl) {
       throw new Error(
-        "[ControlService] Provide either `controlUrl` or (`sdkId` and optional `baseUrl`).",
+        "[ControlService] Provide either `controlUrl` or (`sdkId` and optional `baseUrl`)."
       );
     }
 
-    const fetcher = options.fetcher ?? globalThis.fetch;
-    if (typeof fetcher !== "function") {
-      throw new Error("[ControlService] No fetch implementation found (provide `fetcher`).");
+    const rawFetcher = options.fetcher ?? globalThis.fetch;
+    if (typeof rawFetcher !== "function") {
+      throw new Error(
+        "[ControlService] No fetch implementation found (provide `fetcher`)."
+      );
     }
 
+    // console.log("fetcher", fetcher);
     this.controlUrl = builtUrl;
-    this.fetcher = fetcher;
+    // Some environments expose `fetch` as a method that requires a `this` binding,
+    // otherwise it can throw "Illegal invocation".
+    this.fetcher = rawFetcher.bind(globalThis);
     this.onUpdate = options.onUpdate;
   }
 
   getConfig(): ControlConfig | undefined {
+    // console.log("getConfig currentConfig", this.currentConfig);
     return this.currentConfig;
   }
 
@@ -70,19 +83,15 @@ export class ControlService {
    */
   getToggles():
     | {
-        snowplow: boolean;
         onesignal: boolean;
         gamification: boolean;
-        identity: boolean;
       }
     | undefined {
     if (!this.currentConfig) return undefined;
     const { integrations } = this.currentConfig;
     return {
-      snowplow: integrations.snowplow.enabled,
       onesignal: integrations.onesignal.enabled,
       gamification: integrations.gamification.enabled,
-      identity: integrations.identity.enabled,
     };
   }
 
@@ -108,10 +117,13 @@ export class ControlService {
     let res: Response;
     try {
       res = await this.fetcher(this.controlUrl, { method: "GET", headers });
-    } catch {
+    } catch (err) {
+      // In browsers, fetch failures are often CORS, mixed content, DNS, or a refused connection.
+      // Keep last-known-good config, but emit diagnostics to help debug.
+      // eslint-disable-next-line no-console
+      console.error("[ControlService] fetch failed", this.controlUrl, err);
       return this.currentConfig;
     }
-
     if (res.status === 304) {
       // No body -> no config change, but we may still get a new ETag.
       const newEtag = res.headers.get("etag") ?? undefined;
@@ -173,4 +185,3 @@ export class ControlService {
     }
   }
 }
-

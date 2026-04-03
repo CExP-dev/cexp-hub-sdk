@@ -7,16 +7,9 @@ export interface HubContext {
   getToggles(): IntegrationToggles;
 
   /**
-   * Canonical anonymous id for this runtime.
-   *
-   * May return `null` if identity plumbing is not enabled yet.
-   */
-  getAnonymousId(): string | null;
-
-  /**
    * Known user id, when available.
    *
-   * Intentionally stubbed for now (Task 7 will wire identity).
+   * Intentionally stubbed for now (OneSignal wiring later).
    */
   getUserId(): string | null;
 }
@@ -64,4 +57,3 @@ export interface Plugin {
    */
   destroy?(): void;
 }
-

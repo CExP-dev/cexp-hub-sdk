@@ -14,13 +14,11 @@ describe("Hub + SPA page view", () => {
   it("enableSpaPageView forwards debounced SPA navigations to the callback", () => {
     const onPage = vi.fn();
 
-    const hub = new Hub({ anonymousId: "anon-test" });
+    const hub = new Hub();
 
     hub.setToggles({
-      snowplow: false,
       onesignal: false,
       gamification: false,
-      identity: false,
     });
 
     hub.enableSpaPageView(onPage, 60);
@@ -36,13 +34,11 @@ describe("Hub + SPA page view", () => {
   it("notifySpaExplicitPage suppresses the next debounced SPA page", () => {
     const onPage = vi.fn();
 
-    const hub = new Hub({ anonymousId: "anon-test" });
+    const hub = new Hub();
 
     hub.setToggles({
-      snowplow: false,
       onesignal: false,
       gamification: false,
-      identity: false,
     });
 
     hub.enableSpaPageView(onPage, 50);

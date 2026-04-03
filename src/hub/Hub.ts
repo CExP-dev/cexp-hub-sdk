@@ -2,18 +2,15 @@ import type { IntegrationToggles } from "../types";
 import type { ControlConfig, IntegrationKey } from "../config/schema";
 import type { HubContext, Plugin } from "../plugins/types";
 import { createSpaPageView, DEFAULT_SPA_PAGE_DEBOUNCE_MS } from "./SpaPageView";
-import { IdentityStore } from "./IdentityStore";
 
 const DEFAULT_TOGGLES: IntegrationToggles = {
-  snowplow: false,
   onesignal: false,
   gamification: false,
-  identity: false,
 };
 
 // Fixed integration/plugin registry order.
 // Keep this stable because later tasks may depend on deterministic init/teardown sequencing.
-const PLUGIN_ORDER: IntegrationKey[] = ["snowplow", "onesignal", "identity", "gamification"];
+const PLUGIN_ORDER: IntegrationKey[] = ["onesignal", "gamification"];
 
 class NoopPlugin implements Plugin {
   public readonly name: string;
@@ -33,13 +30,6 @@ class NoopPlugin implements Plugin {
 
 export interface HubOptions {
   /**
-   * Anonymous id provider for HubContext.
-   *
-   * For Task 4 tests, this can be a stable string. Identity persistence is implemented later.
-   */
-  anonymousId?: string | null;
-
-  /**
    * Optional dependency injection for unit tests.
    * Plugins are still registered in `PLUGIN_ORDER`.
    */
@@ -54,7 +44,6 @@ export interface HubOptions {
  */
 export class Hub {
   private readonly plugins = new Map<string, Plugin>();
-  private readonly anonymousIdOverride: string | null | undefined;
 
   private currentControlConfig: ControlConfig | undefined;
   private initialized = false;
@@ -63,8 +52,6 @@ export class Hub {
   private spaHandle?: ReturnType<typeof createSpaPageView>;
 
   constructor(options: HubOptions = {}) {
-    this.anonymousIdOverride = options.anonymousId;
-
     const overrides = options.pluginOverrides ?? {};
     for (const integrationKey of PLUGIN_ORDER) {
       const plugin = overrides[integrationKey] ?? new NoopPlugin(integrationKey);
@@ -95,9 +82,7 @@ export class Hub {
     this.currentControlConfig = {
       version: this.currentControlConfig?.version ?? 0,
       integrations: {
-        snowplow: { enabled: next.snowplow },
         onesignal: { enabled: next.onesignal },
-        identity: { enabled: next.identity },
         gamification: { enabled: next.gamification },
       },
     };
@@ -213,10 +198,6 @@ export class Hub {
     return {
       // Important: read toggles at call time to avoid stale closure state after `setToggles()`.
       getToggles: () => this.currentToggles ?? DEFAULT_TOGGLES,
-      getAnonymousId: () => {
-        if (typeof this.anonymousIdOverride === "string") return this.anonymousIdOverride;
-        return IdentityStore.getOrCreateFptUuid();
-      },
       getUserId: () => null,
     };
   }
@@ -255,12 +236,8 @@ export class Hub {
 
   private deriveTogglesFromControlConfig(cfg: ControlConfig): IntegrationToggles {
     return {
-      snowplow: cfg.integrations.snowplow.enabled,
       onesignal: cfg.integrations.onesignal.enabled,
       gamification: cfg.integrations.gamification.enabled,
-      identity: cfg.integrations.identity.enabled,
     };
   }
-
 }
-

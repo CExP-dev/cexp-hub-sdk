@@ -2,14 +2,13 @@ import type { CExPApi, InitOptions } from "./types";
 import { ControlService } from "./hub/ControlService";
 import { EventRouter } from "./hub/EventRouter";
 import { Hub } from "./hub/Hub";
-import { CdpIdentityPlugin } from "./plugins/identity/CdpIdentityPlugin";
-import { SnowplowPlugin } from "./plugins/snowplow/SnowplowPlugin";
 import { OneSignalPlugin } from "./plugins/onesignal/OneSignalPlugin";
 import { GamificationPlugin } from "./plugins/gamification/GamificationPlugin";
 
 import packageJson from "../package.json";
 
-const DEFAULT_VERSION = (packageJson as { version?: string }).version ?? "0.0.0";
+const DEFAULT_VERSION =
+  (packageJson as { version?: string }).version ?? "0.0.0";
 
 export function createCExP(): CExPApi {
   let initialized = false;
@@ -61,13 +60,14 @@ export function createCExP(): CExPApi {
 
       hub = new Hub({
         pluginOverrides: {
-          snowplow: new SnowplowPlugin(),
           onesignal: new OneSignalPlugin(),
-          identity: new CdpIdentityPlugin(),
           gamification: new GamificationPlugin(),
         },
       });
-      router = new EventRouter({ ctx: hub.getContext(), plugins: hub.getPlugins() });
+      router = new EventRouter({
+        ctx: hub.getContext(),
+        plugins: hub.getPlugins(),
+      });
 
       let applyConfigChain: Promise<void> = Promise.resolve();
       const applyConfig = async () => {
@@ -79,13 +79,7 @@ export function createCExP(): CExPApi {
             if (!config) return;
 
             await hub.setControlConfig(config);
-
-            // SPA page-view integration is controlled only by snowplow enabled flag.
-            if (config.integrations.snowplow.enabled) {
-              hub.enableSpaPageView((props) => router?.page(props));
-            } else {
-              hub.disableSpaPageView();
-            }
+            hub.disableSpaPageView();
           })
           .catch(() => {
             // Keep config application chain alive on transient failures.
@@ -127,7 +121,9 @@ export function createCExP(): CExPApi {
 
     page: (page?: unknown) => {
       requireInit("page");
-      const props = (typeof page === "object" && page !== null ? page : {}) as Record<string, unknown>;
+      const props = (
+        typeof page === "object" && page !== null ? page : {}
+      ) as Record<string, unknown>;
       enqueueOrRun({ type: "page", props });
     },
 
@@ -150,13 +146,7 @@ export function createCExP(): CExPApi {
       router = undefined;
       controlService = undefined;
     },
-
-    getAnonymousId: () => {
-      requireInit("getAnonymousId");
-      return hub?.getContext().getAnonymousId() ?? "";
-    },
   };
 
   return api;
 }
-

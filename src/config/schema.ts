@@ -1,4 +1,4 @@
-export type IntegrationKey = "snowplow" | "onesignal" | "gamification" | "identity";
+export type IntegrationKey = "onesignal" | "gamification";
 
 export interface BasicIntegrationToggleConfig {
   enabled: boolean;
@@ -18,10 +18,8 @@ export interface GamificationIntegrationToggleConfig extends BasicIntegrationTog
 }
 
 export interface IntegrationToggleConfigByKey {
-  snowplow: BasicIntegrationToggleConfig;
   onesignal: BasicIntegrationToggleConfig;
   gamification: GamificationIntegrationToggleConfig;
-  identity: BasicIntegrationToggleConfig;
 }
 
 export interface ControlConfig {
@@ -29,7 +27,7 @@ export interface ControlConfig {
   integrations: IntegrationToggleConfigByKey;
 }
 
-const INTEGRATION_KEYS: IntegrationKey[] = ["snowplow", "onesignal", "gamification", "identity"];
+const INTEGRATION_KEYS: IntegrationKey[] = ["onesignal", "gamification"];
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   // Strictly require an object literal-like shape (no arrays); tolerate null-proto objects.
@@ -76,10 +74,8 @@ export function parseControlConfig(input: unknown): ControlConfig {
   const defaults: ControlConfig = {
     version: 0,
     integrations: {
-      snowplow: { enabled: false },
       onesignal: { enabled: false },
       gamification: { enabled: false },
-      identity: { enabled: false },
     },
   };
 
@@ -91,10 +87,8 @@ export function parseControlConfig(input: unknown): ControlConfig {
   const integrationsInput = isRecord(input.integrations) ? input.integrations : undefined;
 
   const integrations: ControlConfig["integrations"] = {
-    snowplow: { enabled: false },
     onesignal: { enabled: false },
     gamification: { enabled: false },
-    identity: { enabled: false },
   };
 
   for (const key of INTEGRATION_KEYS) {
@@ -143,10 +137,8 @@ export function tryParseControlConfig(input: unknown): ControlConfig | undefined
     if (!isPlainObject(integrationsInput)) return undefined;
 
     const integrations: ControlConfig["integrations"] = {
-      snowplow: { enabled: false },
       onesignal: { enabled: false },
       gamification: { enabled: false },
-      identity: { enabled: false },
     };
 
     for (const key of INTEGRATION_KEYS) {
@@ -198,4 +190,3 @@ export function areControlConfigsEqual(a: ControlConfig, b: ControlConfig): bool
   }
   return true;
 }
-

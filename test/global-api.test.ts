@@ -11,24 +11,13 @@ describe("CExP public surface", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     document.querySelectorAll('script[src*="cexp.fpt.com"]').forEach((el) => el.remove());
-    delete (globalThis as unknown as { snowplow?: unknown }).snowplow;
+    document
+      .querySelectorAll("script[src^='https://cdn.jsdelivr.net/npm/cexp-gamification@']")
+      .forEach((el) => el.remove());
+    delete (globalThis as unknown as { cexp?: unknown }).cexp;
   });
 
-  it("init + pre-init queue flush routes identify/track/page through Snowplow when enabled", async () => {
-    const snowplow = vi.fn();
-
-    const head = document.head;
-    const originalAppend = head.appendChild.bind(head);
-    vi.spyOn(head, "appendChild").mockImplementation((node: Node) => {
-      if (node instanceof HTMLScriptElement && node.src.includes("cexp.fpt.com/sdk/acti/cdp.js")) {
-        queueMicrotask(() => {
-          (globalThis as unknown as { snowplow: typeof snowplow }).snowplow = snowplow;
-          node.dispatchEvent(new Event("load"));
-        });
-      }
-      return originalAppend(node);
-    });
-
+  it("init syncs control config and allows track after first config resolves", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
@@ -36,10 +25,8 @@ describe("CExP public surface", () => {
           JSON.stringify({
             version: 1,
             integrations: {
-              snowplow: { enabled: true },
               onesignal: { enabled: false },
               gamification: { enabled: false },
-              identity: { enabled: false },
             },
           }),
           { status: 200, headers: { "content-type": "application/json", etag: "v1" } },
@@ -49,27 +36,11 @@ describe("CExP public surface", () => {
 
     const CExP = createCExP();
     CExP.init({ id: "sdk-1" });
-    CExP.identify("user-42", { plan: "pro" });
-    CExP.track("purchase", { amount: 10 });
 
     await vi.waitFor(() => {
-      expect(snowplow.mock.calls.some((c) => c[0] === "newTracker")).toBe(true);
-      expect(snowplow.mock.calls.some((c) => c[0] === "trackSelfDescribingEvent")).toBe(true);
+      expect(vi.mocked(fetch)).toHaveBeenCalled();
     });
 
-    CExP.page({ title: "Custom" });
-
-    await vi.waitFor(() => {
-      expect(snowplow.mock.calls.some((c) => c[0] === "trackPageView")).toBe(true);
-    });
-
-    const trackCall = snowplow.mock.calls.find((c) => c[0] === "trackSelfDescribingEvent");
-    expect(trackCall).toBeDefined();
-    const payload = trackCall?.[1] as { context?: Array<{ data: Record<string, unknown> }> };
-    expect(payload.context?.[0]?.data).toMatchObject({
-      userId: "user-42",
-      traits: { plan: "pro" },
-    });
+    expect(() => CExP.track("purchase", { amount: 10 })).not.toThrow();
   });
 });
-

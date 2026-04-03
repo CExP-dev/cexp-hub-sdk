@@ -24,9 +24,7 @@ describe("ControlConfig integration wiring", () => {
           JSON.stringify({
             version: 1,
             integrations: {
-              snowplow: { enabled: false },
               onesignal: { enabled: false },
-              identity: { enabled: false },
               gamification: {
                 enabled: true,
                 packageVersion: GAMIFICATION_VERSION_OVERRIDE,

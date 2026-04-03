@@ -7,12 +7,9 @@ const ONESIGNAL_SCRIPT_URL = "https://cdn.onesignal.com/sdks/web/v16/OneSignalSD
 function hubCtx(overrides?: { getUserId?: () => string | null }) {
   return {
     getToggles: () => ({
-      snowplow: false,
       onesignal: true,
       gamification: false,
-      identity: false,
     }),
-    getAnonymousId: () => null,
     getUserId: overrides?.getUserId ?? (() => null),
   };
 }
