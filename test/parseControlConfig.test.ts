@@ -110,6 +110,20 @@ describe("parseControlConfig schema safety", () => {
     });
   });
 
+  it("preserves onesignal.appId when present", () => {
+    const parsed = parseControlConfig({
+      version: 3,
+      integrations: {
+        onesignal: { enabled: true, appId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" },
+      },
+    });
+
+    expect(parsed.integrations.onesignal).toEqual({
+      enabled: true,
+      appId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    });
+  });
+
   it("ignores invalid gamification.packageVersion inputs", () => {
     const parsed = parseControlConfig({
       version: 1,

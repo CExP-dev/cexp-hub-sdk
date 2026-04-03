@@ -114,8 +114,8 @@ Implement:
      - parsed JSON must be a non-null plain object (reject arrays/primitives)
      - `version` must be a finite number (otherwise treat reload as failure)
      - `integrations` must be a plain object (otherwise treat reload as failure)
-     - unknown integration keys must be ignored; emitted response must include only:
-       - `onesignal`, `gamification`
+     - unknown integration keys must be ignored; emitted response must include exactly the four keys expected by `cexp-hub-sdk` `ControlConfig`:
+       - `snowplow`, `onesignal`, `identity`, `gamification`
      - for each integration key:
        - if the block is missing: treat as disabled (`enabled: false`)
        - if present: must be a plain object

@@ -4,6 +4,13 @@ export interface BasicIntegrationToggleConfig {
   enabled: boolean;
 }
 
+export interface OneSignalIntegrationToggleConfig extends BasicIntegrationToggleConfig {
+  /**
+   * OneSignal web app id (UUID). Required for the SDK script to load when enabled.
+   */
+  appId?: string;
+}
+
 export interface GamificationIntegrationToggleConfig extends BasicIntegrationToggleConfig {
   /**
    * Optional remote override for the gamification integration.
@@ -18,7 +25,7 @@ export interface GamificationIntegrationToggleConfig extends BasicIntegrationTog
 }
 
 export interface IntegrationToggleConfigByKey {
-  onesignal: BasicIntegrationToggleConfig;
+  onesignal: OneSignalIntegrationToggleConfig;
   gamification: GamificationIntegrationToggleConfig;
 }
 
@@ -104,8 +111,10 @@ export function parseControlConfig(input: unknown): ControlConfig {
 
       integrations.gamification = gamification;
     } else {
-      const basic: BasicIntegrationToggleConfig = { enabled: enabled ?? false };
-      integrations[key] = basic;
+      const appId = isRecord(block) ? safeNonEmptyString((block as Record<string, unknown>).appId) : undefined;
+      const onesignal: OneSignalIntegrationToggleConfig = { enabled: enabled ?? false };
+      if (appId !== undefined) onesignal.appId = appId;
+      integrations.onesignal = onesignal;
     }
   }
 
@@ -163,8 +172,10 @@ export function tryParseControlConfig(input: unknown): ControlConfig | undefined
         if (packageVersion !== undefined) gamification.packageVersion = packageVersion;
         integrations.gamification = gamification;
       } else {
-        const basic: BasicIntegrationToggleConfig = { enabled };
-        integrations[key] = basic;
+        const appId = safeNonEmptyString((block as Record<string, unknown>).appId);
+        const onesignal: OneSignalIntegrationToggleConfig = { enabled };
+        if (appId !== undefined) onesignal.appId = appId;
+        integrations.onesignal = onesignal;
       }
     }
 
@@ -185,7 +196,8 @@ export function areControlConfigsEqual(a: ControlConfig, b: ControlConfig): bool
       )
         return false;
     } else {
-      if (a.integrations[key].enabled !== b.integrations[key].enabled) return false;
+      if (a.integrations.onesignal.enabled !== b.integrations.onesignal.enabled) return false;
+      if (a.integrations.onesignal.appId !== b.integrations.onesignal.appId) return false;
     }
   }
   return true;

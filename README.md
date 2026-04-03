@@ -2,15 +2,31 @@
 
 Browser SDK facade exposed as `window.CExP` (IIFE) or `CExP` (ESM import).
 
+The hub loads **remote control config** for your `sdkId` (toggles + optional integration fields), polls for updates, and routes calls to internal integrations. **Two integrations** are supported: **OneSignal** (push / user association) and **gamification** (`cexp-gamification`). Consumers use only `CExP`; they do not configure vendors directly.
+
+More detail: [`docs/superpowers/architecture/2026-03-20-cexp-hub-sdk-system-architecture.md`](docs/superpowers/architecture/2026-03-20-cexp-hub-sdk-system-architecture.md).
+
 ## Public API
 
-Only the following APIs are supported for consumer code:
+Supported surface for application code:
 
 - `CExP.init({ id })`
 - `CExP.track(event, props?)`
+- `CExP.page(pageProps?)`
 - `CExP.identify(userId, traits?)`
 - `CExP.reset()`
-- `CExP.page(pageProps?)`
+- `CExP.version` — hub package version (from `package.json` for that build)
+
+### Routing (high level)
+
+| Call | When integrations are enabled in control config |
+| --- | --- |
+| `track` | Forwarded to **gamification** only. |
+| `page` | Forwarded to **gamification** only (explicit calls; there is no automatic `history` listener). |
+| `identify` | Forwarded to **OneSignal** and **gamification** (each if its toggle is on). |
+| `reset` | Forwarded to **OneSignal** and **gamification** (each if its toggle is on). |
+
+If a toggle is off, the corresponding integration is not loaded and those calls are effectively no-ops for that vendor.
 
 ### `CExP.init({ id })`
 
@@ -23,15 +39,23 @@ CExP.init({ id: "your-sdk-id" });
 
 ### `CExP.track(event, props?)`
 
-Track an event by name.
+Track a named event. Routed to gamification when that integration is enabled.
 
 ```ts
 CExP.track("button_clicked", { location: "hero" });
 ```
 
+### `CExP.page(pageProps?)`
+
+Emit an explicit page-style payload (e.g. from your SPA router). Routed to gamification when enabled. Not tied to browser history automatically.
+
+```ts
+CExP.page({ name: "pricing", path: "/pricing" });
+```
+
 ### `CExP.identify(userId, traits?)`
 
-Associate future events with a user id and optional traits.
+Associate the current user (and optional traits) with downstream integrations. Routed to OneSignal and/or gamification per toggles.
 
 ```ts
 CExP.identify("user-123", { plan: "pro" });
@@ -39,40 +63,34 @@ CExP.identify("user-123", { plan: "pro" });
 
 ### `CExP.reset()`
 
-Tear down SDK runtime state for the current page. Call `init({ id })` again before sending events (`track` / `page` / `identify`).
+Tear down SDK runtime state for the current page. Call `init({ id })` again before sending events.
 
 ```ts
 CExP.reset();
 ```
 
-### `CExP.page(pageProps?)`
+## Consumer code guardrail
 
-Emit an explicit page-view style event payload.
+Do not use vendor globals from application code — use `CExP` only:
 
-```ts
-CExP.page({ name: "pricing" });
-```
-
-## Consumer Code Guardrail
-
-Do not use vendor globals in app code (use `CExP` only):
-
-- `window.OneSignal` / OneSignal deferred queues
+- OneSignal deferred queues / `OneSignal` globals managed by the SDK
 - `window.cexp` (gamification)
 
-Integrations and plugin internals are SDK-managed and may change independently.
+Integration wiring and script URLs are SDK-managed and may change with hub releases or backend config.
 
-## Evergreen vs Vendor Updates
+## Evergreen vs vendor updates
 
-### What is evergreen
+### Evergreen
 
-Evergreen means consumers never change the SDK script (host/path or URL) after integration. Your integration code stays stable while the hub updates runtime behavior.
+Consumers keep a stable script URL (or pinned major) after integration; behavior can evolve via **backend control config** and hub releases without rewriting app calls to `CExP`.
 
-### What changes with vendor updates
+### What can change without a new snippet
 
-With vendor updates, the hub can update safe integration “knobs” via backend control configuration (for example, gamification `packageVersion`).
+Safe, validated fields in control JSON (e.g. gamification `packageVersion` / `apiKey` when your platform exposes them) can be updated server-side for a given `sdkId`.
 
-If the hub needs to change the pinned script host/path itself, that requires a new hub release (consumers should update by pulling the new hub release, not by editing their app’s integration code).
+### What needs a new hub release
+
+Changes to **hub-pinned** script URLs, init behavior, or public `CExP` API require a new **`cexp-hub-sdk`** version (npm / CDN).
 
 ## Build
 
@@ -88,4 +106,3 @@ If the hub needs to change the pinned script host/path itself, that requires a n
   - `https://cdn.jsdelivr.net/npm/cexp-hub-sdk@<version>/dist/browser.global.js`
 - ESM entry in package exports:
   - `cexp-hub-sdk` (maps to `dist/index.js`)
-

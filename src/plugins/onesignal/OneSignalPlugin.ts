@@ -2,6 +2,8 @@ import type { HubContext, Plugin } from "../types";
 
 const ONESIGNAL_SCRIPT_URL = "https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js";
 const SCRIPT_MARKER_ATTR = "data-cexp-onesignal";
+/** Marks the inline bootstrap so DevTools shows the same two-tag pattern as OneSignal’s embed docs. */
+const SCRIPT_INLINE_MARKER_ATTR = "data-cexp-onesignal-inline";
 
 export type OneSignalIntegrationConfig = {
   appId?: string;
@@ -31,6 +33,28 @@ function getOneSignalDeferredQueue(): OneSignalDeferredQueue {
     w.OneSignalDeferred = [];
   }
   return w.OneSignalDeferred as OneSignalDeferredQueue;
+}
+
+/**
+ * Injects an inline `<script>` before the CDN tag so the DOM matches OneSignal’s documented
+ * embed (array bootstrap in markup). `OneSignalDeferred.push(...)` with `init` still runs from
+ * this plugin’s JS so we can wire `identify` / lifecycle without duplicating logic.
+ */
+function ensureOneSignalDeferredBootstrapInline(): void {
+  if (typeof document === "undefined") return;
+
+  const existing = document.querySelector<HTMLScriptElement>(
+    `script[${SCRIPT_INLINE_MARKER_ATTR}="true"]`,
+  );
+  if (existing) return;
+
+  const script = document.createElement("script");
+  script.setAttribute(SCRIPT_INLINE_MARKER_ATTR, "true");
+  script.textContent = [
+    "window.OneSignalDeferred = window.OneSignalDeferred || [];",
+    "// cexp-hub-sdk: init/login handlers are pushed from the SDK before the SDK script loads.",
+  ].join("\n");
+  document.head.appendChild(script);
 }
 
 function ensureOneSignalScriptLoaded(): Promise<void> {
@@ -137,6 +161,8 @@ export class OneSignalPlugin implements Plugin {
   private async enable(): Promise<void> {
     if (!this.active || !this.cfg.appId) return;
 
+    ensureOneSignalDeferredBootstrapInline();
+
     // Queue init before loading the SDK so the deferred queue is drained on startup.
     getOneSignalDeferredQueue().push(async (OneSignal: OneSignalLike) => {
       if (!this.active) return;
@@ -170,6 +196,9 @@ export class OneSignalPlugin implements Plugin {
     }
 
     if (typeof document !== "undefined") {
+      document
+        .querySelectorAll<HTMLScriptElement>(`script[${SCRIPT_INLINE_MARKER_ATTR}="true"]`)
+        .forEach((el) => el.remove());
       document.querySelectorAll<HTMLScriptElement>(`script[src="${ONESIGNAL_SCRIPT_URL}"]`).forEach((el) => el.remove());
     }
 
