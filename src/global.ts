@@ -42,7 +42,6 @@ export function createCExP(): CExPApi {
       return;
     }
     if (entry.type === "page") {
-      hub.notifySpaExplicitPage();
       router.page(entry.props);
       return;
     }
@@ -79,7 +78,6 @@ export function createCExP(): CExPApi {
             if (!config) return;
 
             await hub.setControlConfig(config);
-            hub.disableSpaPageView();
           })
           .catch(() => {
             // Keep config application chain alive on transient failures.
@@ -136,7 +134,6 @@ export function createCExP(): CExPApi {
     reset: () => {
       requireInit("reset");
       router?.reset();
-      hub?.disableSpaPageView();
       controlService?.stopPolling();
       initialized = false;
       firstConfigResolved = false;
