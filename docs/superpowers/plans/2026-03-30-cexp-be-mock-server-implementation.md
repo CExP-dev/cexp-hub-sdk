@@ -31,7 +31,7 @@ Create `test/control-endpoint.fallback.test.ts` with assertions:
 2. `content-type` contains `application/json`
 3. Body matches the `ControlConfig` shape:
    - `version` is `0` (fallback)
-   - `integrations.snowplow/onesignal/identity/gamification.enabled` are all `false`
+   - `integrations.onesignal.enabled` and `integrations.gamification.enabled` are both `false`
 4. Response includes an `etag` header (non-empty string)
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -115,7 +115,7 @@ Implement:
      - `version` must be a finite number (otherwise treat reload as failure)
      - `integrations` must be a plain object (otherwise treat reload as failure)
      - unknown integration keys must be ignored; emitted response must include only:
-       - `snowplow`, `onesignal`, `gamification`, `identity`
+       - `onesignal`, `gamification`
      - for each integration key:
        - if the block is missing: treat as disabled (`enabled: false`)
        - if present: must be a plain object

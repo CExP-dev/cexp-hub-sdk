@@ -1,6 +1,8 @@
 # CExP Hub SDK — system architecture
 
-This document reflects the architecture described in the implementation plan: [../plans/2026-03-20-cexp-hub-sdk.md](../plans/2026-03-20-cexp-hub-sdk.md).
+> **Current as of 2026-04:** Runtime behavior is a **two-integration** hub (**OneSignal**, **gamification**) behind `window.CExP`. **Identity (cdp.js), Snowplow, `IdentityStore`, and automatic SPA history listeners were removed** — see [../plans/2026-04-03-remove-identity-snowplow-plugins.md](../plans/2026-04-03-remove-identity-snowplow-plugins.md).
+
+The older four-plugin design (identity + Snowplow + OneSignal + gamification) is documented historically in [../plans/2026-03-20-cexp-hub-sdk.md](../plans/2026-03-20-cexp-hub-sdk.md); treat that plan as **superseded** for current product behavior.
 
 Diagrams use [Mermaid](https://mermaid.js.org/); render in GitHub, VS Code (preview), or any Mermaid-compatible viewer.
 
@@ -8,20 +10,64 @@ Diagrams use [Mermaid](https://mermaid.js.org/); render in GitHub, VS Code (prev
 
 ## Integration philosophy
 
-**Integrate once, never touch script again.** Consumers embed a single stable CDN script snippet one time. After that, toggles and integration behavior are driven by your backend (control/toggle polling), and the SDK injects/removes vendor scripts lazily per integration. This lets your platform evolve without forcing consumers to update their snippet.
+**Integrate once, never touch script again.** Consumers embed a single stable CDN script snippet one time. After that, toggles and integration behavior are driven by your backend (control/toggle polling), and the SDK injects/removes vendor scripts lazily per integration.
 
-**All four integrations have toggles.** Identity (cdp.js), tracking (Snowplow), notifications (OneSignal), and gamification are each independently togglable from the backend config. When toggled on, the vendor script is lazy-loaded and initialized. When toggled off, the plugin is destroyed and its `<script>` tag is **removed from the DOM**.
+**Two integrations have toggles.** **Notifications (OneSignal)** and **gamification** are independently togglable from the backend config. When toggled on, the vendor script is lazy-loaded and initialized. When toggled off, the plugin is destroyed and its `<script>` tag is **removed from the DOM**.
+
+There is **no** automatic single-page-app page listener: consumers who need route-level signals call `**CExP.page()`** explicitly (for example from a router `afterEach` hook). `CExP.track` is forwarded to **gamification** when that integration is enabled.
+
+---
+
+## Version management (hybrid)
+
+This SDK follows a **hybrid** version-management policy (design spec: [../specs/2026-03-30-version-management-design.md](../specs/2026-03-30-version-management-design.md)):
+
+- **Layer 1 — Hub package SemVer**: `cexp-hub-sdk` releases (npm / CDN) represent the **public `CExP` API** and hub behavior compatibility.
+- **Layer 2 — Vendor pins (hybrid split)**:
+  - **Hub-pinned (default)**: sensitive integrations (script hosts/paths, init patterns) are fixed in hub code and only change via hub release (e.g. OneSignal SDK URL).
+  - **Remote-config knobs (allowlisted)**: explicitly supported, validated fields may be overridden by control JSON without a hub release (e.g. gamification `packageVersion`, `apiKey`), with hub defaults as fallback.
+- **Layer 3 — Control API `version` field**: the config payload `version` is for **change detection / identity** (often paired with ETag), **not** npm SemVer.
+
+### Version layers (stack)
+
+```mermaid
+flowchart TB
+  L1["Layer 1: Hub package SemVer (package.json / CExP.version)"]
+  L2a["Layer 2a: Hub-pinned vendor URLs + init patterns (e.g. OneSignal SDK)"]
+  L2b["Layer 2b: Remote-config knobs (optional, allowlisted)"]
+  L3["Layer 3: Control API version field (ETag / change detection)"]
+
+  L1 --> L2a
+  L1 --> L2b
+  L3 --> L2b
+```
+
+
+
+### Hub release vs backend-only change
+
+```mermaid
+flowchart TD
+  Q[Vendor or integration change]
+  Q --> H{Breaking API, new script host/path,\nor hub logic change?}
+  H -->|Yes| R1[New cexp-hub-sdk release + CI + deploy npm/CDN]
+  H -->|No| Q2{Only safe remote fields\n(e.g. allowlisted gamification semver)?}
+  Q2 -->|Yes + wired| R2[Update control API config for sdkId\n(optional; no hub release)]
+  Q2 -->|No / not wired| R1
+```
+
+
 
 ---
 
 ## 1. Key integration details
 
-| Integration | Script source | Global | Hub role |
-| --- | --- | --- | --- |
-| Identity | `octopus-stream01-cads.fpt.vn/cdp.js` | `window.cdpFpt` | Segment Analytics.js fork. **Identity only** — `fpt_uuid` management, cross-domain sync. Event pipeline disabled. |
-| Tracking | `cexp.fpt.com/sdk/acti/cdp.js` | `window.snowplow` | Self-hosted Snowplow sp.js tracker. All event capture: `trackSelfDescribingEvent`, `trackPageView`, `enableActivityTracking`. |
-| Notifications | `cdn.onesignal.com/.../OneSignalSDK.page.js` | `window.OneSignalDeferred` | Web push via OneSignalDeferred init pattern. |
-| Gamification | `cdn.jsdelivr.net/.../cexp-web-sdk.js` | `window.cexp` | In-house gamification. `new window.cexp({ apiKey })` + `init()`. |
+
+| Integration   | Script source                                                   | Global                    | Hub role                                                   | Versioning policy                                                |
+| ------------- | --------------------------------------------------------------- | ------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------- |
+| Notifications | `cdn.onesignal.com/.../OneSignalSDK.page.js`                    | `OneSignalDeferred` queue | Web push; `identify` maps to vendor login where supported. | **Hub-pinned** (URL/init via hub release)                        |
+| Gamification  | `cdn.jsdelivr.net/npm/cexp-gamification@…/dist/cexp-web-sdk.js` | `window.cexp`             | `track` / `page` / `identify` hooks when enabled.          | **Hybrid** (hub defaults; optional allowlisted remote overrides) |
+
 
 ---
 
@@ -46,9 +92,7 @@ flowchart TB
   end
 
   subgraph vendors [Vendor scripts — lazy loaded per toggle]
-    SnowplowCol["Snowplow collector\n(octopus-stream01-cads.fpt.vn)"]
     OneSignalSvc[OneSignal]
-    CdpHost["cdp.js host\n(octopus-stream01-cads.fpt.vn/cdp.js)"]
     GamCDN[Gamification CDN]
   end
 
@@ -56,11 +100,11 @@ flowchart TB
   EndUserPerson[End user] --> Browser
 
   Script -->|"GET config (sdkId, ETag, poll 5m)"| ConfigAPI
-  Script -->|"toggle on: inject + init\ntoggle off: destroy + remove"| SnowplowCol
   Script -->|"toggle on: inject + init\ntoggle off: destroy + remove"| OneSignalSvc
-  Script -->|"toggle on: inject + init\ntoggle off: destroy + remove"| CdpHost
   Script -->|"toggle on: inject + init\ntoggle off: destroy + remove"| GamCDN
 ```
+
+
 
 ---
 
@@ -78,14 +122,10 @@ flowchart TB
     Hub[Hub orchestrator]
     ControlSvc[ControlService]
     Router[EventRouter]
-    IdStore[IdentityStore]
-    SpaHook[SpaPageView]
     PreQ["Pre-init queue\n(before config arrives)"]
   end
 
   subgraph plugins [Internal plugins — not exposed to consumers]
-    PIdent[CdpIdentityPlugin]
-    PSnow[SnowplowPlugin]
     POne[OneSignalPlugin]
     PGam[GamificationPlugin]
   end
@@ -93,18 +133,13 @@ flowchart TB
   CExP --> Hub
   Hub --> ControlSvc
   Hub --> Router
-  Hub --> IdStore
-  Hub --> SpaHook
   Hub --> PreQ
 
-  Router --> PSnow
   Router --> POne
   Router --> PGam
-  IdStore --> PIdent
-  Hub --> PIdent
-
-  SpaHook -->|"virtual page"| Router
 ```
+
+
 
 ---
 
@@ -117,16 +152,18 @@ flowchart LR
     B --> C[Apply toggles]
     C --> D["Lazy-load enabled plugins\n(inject scripts)"]
     D --> E[Flush pre-init queue]
-    E --> F[Start SPA hooks + 5m polling]
+    E --> F[Start 5m polling]
   end
 
   subgraph runtimePhase [Runtime events]
     T["CExP.track()"] --> G[EventRouter]
-    P["CExP.page() / SPA hook"] --> G
+    P["CExP.page()"] --> G
     I["CExP.identify()"] --> G
     G -->|"per toggle rules"| H[Enabled plugins]
   end
 ```
+
+
 
 ### Pre-init queue
 
@@ -163,6 +200,12 @@ sequenceDiagram
   end
 ```
 
+
+
+### Control API `version` (config identity)
+
+The control JSON `version` value is treated as **config identity / change detection** (usually paired with ETag). It is **not** the hub package SemVer; hub SemVer remains `cexp-hub-sdk`’s published version.
+
 ---
 
 ## 6. Toggle lifecycle
@@ -172,76 +215,30 @@ When a plugin's toggle transitions, the hub performs:
 ```mermaid
 flowchart LR
   subgraph toggleOn ["Toggle: off → on"]
-    A1["Inject vendor <script>"] --> A2["Wait for global\n(window.snowplow, etc.)"]
-    A2 --> A3["Initialize plugin\n(newTracker, OneSignal.init, etc.)"]
+    A1["Inject vendor <script>"] --> A2["Wait for vendor global"]
+    A2 --> A3["Initialize plugin"]
     A3 --> A4["Plugin active — receives events"]
   end
 
   subgraph toggleOff ["Toggle: on → off"]
     B1["Call plugin.destroy()"] --> B2["Remove <script> from DOM"]
     B2 --> B3["Clean up globals\nwhere possible"]
-    B3 --> B4["Plugin inactive — events dropped/queued"]
+    B3 --> B4["Plugin inactive"]
   end
 ```
 
----
 
-## 7. Identity and anonymous id (`fpt_uuid`)
-
-`cdp.js` (`window.cdpFpt`) is a **Segment Analytics.js 3.x fork** used exclusively as an identity layer. Its event pipeline (sends to `/analytics/t`, `/p`, `/i`) is **disabled** by the hub — only the user/identity API is used.
-
-```mermaid
-flowchart TB
-  subgraph identityFlow [Identity path]
-    Toggle{"identity\ntoggle on?"}
-    Cdp["CdpIdentityPlugin\nloads cdp.js"]
-    Disable["Disable cdpFpt\nevent pipeline"]
-    Fpt["fpt_uuid from cdpFpt\nuser().anonymousId()"]
-    Sync["Backend sync\n(/analytics/sync_user)"]
-    Store["IdentityStore\nlocalStorage + cookie"]
-  end
-
-  Toggle -->|yes| Cdp
-  Cdp --> Disable
-  Cdp --> Fpt
-  Fpt --> Sync
-  Fpt --> Store
-
-  Toggle -->|no| NoId["No fpt_uuid\n(Snowplow uses own domain_userid)"]
-
-  Store --> Ctx["Custom context entity\non Snowplow events"]
-
-  Known["CExP.identify(userId, traits)"] --> CtxUpdate["Update context entity\n(does NOT call setUserId)"]
-  Reset["CExP.reset()"] --> Clear["Clear userId + traits\nretain fpt_uuid"]
-```
-
-### Custom context entity (attached to Snowplow events)
-
-When both identity and Snowplow are enabled, every Snowplow event carries:
-
-```json
-{
-  "schema": "iglu:com.fpt/cexp_identity/jsonschema/1-0-0",
-  "data": {
-    "fpt_uuid": "<from IdentityStore>",
-    "userId": "<from CExP.identify, or null>",
-    "traits": {}
-  }
-}
-```
-
-`CExP.identify(userId, traits)` does **not** call Snowplow's `setUserId()`. The business user identity is only passed through this custom context entity.
 
 ---
 
-## 8. Event routing rules
+## 7. Event routing rules (current)
 
-| Integration | Toggle on | Toggle off |
-| --- | --- | --- |
-| **Identity** | `cdp.js` loaded; `fpt_uuid` generated, synced, stored | `cdp.js` not loaded; script removed from DOM; no `fpt_uuid` |
-| **Snowplow** | `track` → `trackSelfDescribingEvent`; `page` → `trackPageView`; `identify` → update context entity | **Queue `identify`** (max 50, 30 min TTL); **drop** `track` + `page`; script removed from DOM |
-| **OneSignal** | `identify` → associate user; push subscriptions active | Clear user/subscription; script removed from DOM |
-| **Gamification** | `track`/`identify` forwarded to SDK | Drop all calls; script removed from DOM |
+
+| Integration      | Toggle on                                                | Toggle off                                       |
+| ---------------- | -------------------------------------------------------- | ------------------------------------------------ |
+| **OneSignal**    | `identify` → associate user; push flow per vendor SDK    | Clear user/subscription; script removed from DOM |
+| **Gamification** | `track` / `page` / `identify` forwarded when hooks exist | Calls ignored; script removed from DOM           |
+
 
 ```mermaid
 flowchart TB
@@ -249,46 +246,22 @@ flowchart TB
   PQ -->|no| Q["Pre-init queue"]
   PQ -->|yes| R[EventRouter]
 
-  R -->|"snowplow on"| S[SnowplowPlugin]
-  R -->|"snowplow off"| SQ["Queue identify\nDrop track/page"]
   R -->|"onesignal on"| O[OneSignalPlugin]
   R -->|"gamification on"| G[GamificationPlugin]
-
-  S -->|"every event"| Ctx["+ fpt_uuid context entity"]
 ```
 
----
 
-## 9. Snowplow integration details
 
-The Snowplow tracker is self-hosted. The hub injects and configures it when the tracking toggle is enabled.
-
-```mermaid
-sequenceDiagram
-  participant Hub as CExP Hub
-  participant SP as Snowplow Tracker
-  participant Col as Snowplow Collector
-
-  Hub->>Hub: tracking toggle → on
-  Hub->>SP: inject script (cexp.fpt.com/sdk/acti/cdp.js)
-  Hub->>SP: newTracker("sp1", collectorUrl, config)
-  Hub->>SP: enableActivityTracking(5s, 10s)
-
-  Note over Hub,SP: CExP.track(eventName, props)
-  Hub->>SP: trackSelfDescribingEvent({ schema, data }) + fpt_uuid context
-  SP->>Col: POST /com.fpt/t
-
-  Note over Hub,SP: CExP.page()
-  Hub->>SP: trackPageView() + fpt_uuid context
-  SP->>Col: POST /com.fpt/t
-
-  Note over Hub,SP: Toggle off
-  Hub->>SP: destroy
-  Hub->>Hub: remove <script> from DOM
-```
+- `**track`:** gamification only (when enabled).
+- `**page`:** gamification only (when enabled); the gamification plugin may implement `page` or leave it empty.
+- `**identify`:** OneSignal and gamification (each when enabled).
+- `**reset`:** OneSignal and gamification (each when enabled).
 
 ---
 
 ## Related
 
-- Implementation tasks and file layout: [../plans/2026-03-20-cexp-hub-sdk.md](../plans/2026-03-20-cexp-hub-sdk.md)
+- Historical implementation plan (four plugins): [../plans/2026-03-20-cexp-hub-sdk.md](../plans/2026-03-20-cexp-hub-sdk.md)
+- Removal of identity + Snowplow + SPA stack: [../plans/2026-04-03-remove-identity-snowplow-plugins.md](../plans/2026-04-03-remove-identity-snowplow-plugins.md)
+- Version-management policy (hybrid): [../specs/2026-03-30-version-management-design.md](../specs/2026-03-30-version-management-design.md)
+

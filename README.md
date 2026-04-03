@@ -55,12 +55,10 @@ CExP.page({ name: "pricing" });
 
 ## Consumer Code Guardrail
 
-Do not use implementation globals in app code:
+Do not use vendor globals in app code (use `CExP` only):
 
-- `window.Snowplow`
-- `window.OneSignal`
-- `window.cexp`
-- `window.cdpFpt`
+- `window.OneSignal` / OneSignal deferred queues
+- `window.cexp` (gamification)
 
 Integrations and plugin internals are SDK-managed and may change independently.
 

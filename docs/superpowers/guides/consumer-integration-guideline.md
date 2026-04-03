@@ -14,10 +14,8 @@ Use only the `CExP` public API:
 
 Do not call internal/vendor globals directly from app code:
 
-- `window.Snowplow`
-- `window.OneSignal`
-- `window.cexp`
-- `window.cdpFpt`
+- `window.OneSignal` / OneSignal deferred queues
+- `window.cexp` (gamification)
 
 These are managed internally by the SDK and may change without notice.
 
@@ -104,9 +102,8 @@ CExP.identify("user-123", {
 
 ### `CExP.page(pageProps?)`
 
-- Sends an explicit page-view style event.
-- Useful for custom route names in SPAs.
-- Can coexist with SDK auto page tracking.
+- Sends an explicit page-view style payload through the hub (routed to **gamification** when that integration is enabled).
+- Use this from SPA router hooks if you need per-route signals; the SDK does **not** subscribe to `history` automatically.
 
 ```ts
 CExP.page({
@@ -181,7 +178,7 @@ export function safeTrack(event: string, props?: Record<string, unknown>) {
 ## Validation Checklist (Before Release)
 
 - [ ] `init({ id })` is called once on app start.
-- [ ] No direct use of `Snowplow`, `OneSignal`, `cexp`, or `cdpFpt`.
+- [ ] No direct use of `OneSignal` or `cexp` globals outside the documented `CExP` API.
 - [ ] Core events fire on key product journeys.
 - [ ] User identify flow is triggered after login.
 - [ ] `page()` is wired for SPA route transitions (if needed).

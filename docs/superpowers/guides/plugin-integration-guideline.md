@@ -15,8 +15,8 @@ The browser SDK exposes a single public facade (`window.CExP`) and routes everyt
 
 Reference files:
 - `src/global.ts` (facade wiring, pre-config queue, startup flow)
-- `src/hub/Hub.ts` (plugin registry, toggle transitions, SPA hook)
-- `src/hub/EventRouter.ts` (event routing and queue/drop policy)
+- `src/hub/Hub.ts` (plugin registry, toggle transitions)
+- `src/hub/EventRouter.ts` (event routing to enabled plugins)
 - `src/hub/ControlService.ts` (remote control fetch + polling)
 - `src/plugins/types.ts` (plugin contract)
 
@@ -46,7 +46,7 @@ Design intent:
 Before coding, answer:
 - Which events should this plugin consume (`track`, `page`, `identify`, `reset`)?
 - Should calls be dropped, queued, or forwarded when plugin is disabled?
-- Does it need identity context (`fpt_uuid`, `userId`, `traits`)?
+- Does it need user context (`userId`, `traits`) from `identify`?
 
 Then map behavior into `EventRouter` rules.
 
@@ -55,7 +55,6 @@ Then map behavior into `EventRouter` rules.
 Create `src/plugins/<plugin-name>/<PluginName>Plugin.ts`.
 
 Use existing plugin patterns:
-- `src/plugins/snowplow/SnowplowPlugin.ts`
 - `src/plugins/onesignal/OneSignalPlugin.ts`
 - `src/plugins/gamification/GamificationPlugin.ts`
 
@@ -73,7 +72,7 @@ Implementation requirements:
 ### 3) Register plugin in hub and facade
 
 Current registry keys are fixed in `Hub`:
-- `snowplow`, `onesignal`, `identity`, `gamification`
+- `onesignal`, `gamification`
 
 To add a new plugin:
 - Update integration key union and defaults (`src/config/schema.ts`, `src/types.ts`).
@@ -104,7 +103,7 @@ Required tests for new plugin:
 
 And integration-level tests:
 - Router calls plugin only when expected.
-- Queue/drop semantics (if applicable).
+- Routing semantics when other integrations are off (see `EventRouter`).
 - Toggle transitions trigger `onToggle` correctly.
 
 Test locations:

@@ -1,5 +1,7 @@
 # CExP Hub (Unified Browser SDK) Implementation Plan
 
+> **Historical / superseded for runtime behavior (2026-04):** This plan describes the original **four-plugin** hub (identity, Snowplow, OneSignal, gamification), automatic SPA page listening, and `fpt_uuid` / Snowplow context. The **current** product is a **two-plugin** hub (OneSignal + gamification) with no Snowplow, no identity plugin, and no automatic SPA listener — see [../architecture/2026-03-20-cexp-hub-sdk-system-architecture.md](../architecture/2026-03-20-cexp-hub-sdk-system-architecture.md) and [2026-04-03-remove-identity-snowplow-plugins.md](2026-04-03-remove-identity-snowplow-plugins.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship a single browser SDK (`window.CExP`) that consumers integrate with a script tag plus `CExP.init({ id: sdkId })`; all analytics, push, identity (`fpt_uuid`), and gamification go through the hub — never direct `Snowplow` / `OneSignal` / vendor globals. Consumers integrate once; the SDK stays evergreen and behavior is governed by backend toggles (consumers never update their snippet).

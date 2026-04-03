@@ -1,7 +1,7 @@
 # Version management — design (hybrid)
 
 **Status:** Draft for review  
-**Related:** [../plans/2026-03-20-cexp-hub-sdk.md](../plans/2026-03-20-cexp-hub-sdk.md) (evergreen snippet, remote control)
+**Related:** [../architecture/2026-03-20-cexp-hub-sdk-system-architecture.md](../architecture/2026-03-20-cexp-hub-sdk-system-architecture.md) (current hub); [../plans/2026-03-20-cexp-hub-sdk.md](../plans/2026-03-20-cexp-hub-sdk.md) (historical four-plugin plan)
 
 ---
 
@@ -10,7 +10,7 @@
 Define a **best-practice, hybrid** policy for:
 
 1. `**cexp-hub-sdk` releases** (npm / CDN SemVer).
-2. **Vendor script / package versions** (Snowplow, OneSignal, identity `cdp.js`, gamification, etc.).
+2. **Vendor script / package versions** (OneSignal SDK, gamification `cexp-gamification`, etc.).
 
 The policy must preserve **integrate once (evergreen snippet)**: consumer pages keep a single stable integration pattern (`script` + `CExP.init({ id })`); **consumers do not** edit script URLs for every vendor bump. Platform teams move behavior via **hub releases** and/or **backwards-compatible control API** updates.
 
@@ -54,7 +54,7 @@ flowchart TB
   end
 
   subgraph vendors [Vendor scripts — lazy-loaded]
-    V1[cdp.js / Snowplow / OneSignal URLs…]
+    V1[OneSignal SDK URL…]
     V2[cexp-gamification@semver]
   end
 
@@ -73,7 +73,7 @@ flowchart TB
 ```mermaid
 flowchart TB
   L1["Layer 1: Hub package SemVer (package.json / CExP.version)"]
-  L2a["Layer 2a: Hub-pinned vendor URLs (identity, Snowplow script, OneSignal SDK)"]
+  L2a["Layer 2a: Hub-pinned vendor URLs (e.g. OneSignal SDK)"]
   L2b["Layer 2b: Remote-config knobs (e.g. gamification packageVersion + apiKey)"]
   L3["Layer 3: Control API version field (ETag / change detection)"]
 
@@ -129,7 +129,7 @@ flowchart LR
   - New or changed **initialization / teardown** logic for a plugin.
   - Compatibility shims for a vendor upgrade that cannot be expressed safely by config alone.
 
-**Release artifacts:** npm publish + `dist/` (ESM + IIFE); CDN consumers pin `cexp-hub-sdk@<version>` or use a **sing=le stable URL** your team redirects to a tested version.
+**Release artifacts:** npm publish + `dist/` (ESM + IIFE); CDN consumers pin `cexp-hub-sdk@<version>` or use a **single stable URL** your team redirects to a tested version.
 
 ---
 
@@ -139,9 +139,8 @@ flowchart LR
 
 These are **fixed in source** (constants), covered by tests, and updated **only** via a **new hub release**:
 
-- **Identity:** `cdp.js` URL (e.g. `octopus-stream01-cads.fpt.vn/cdp.js`).
-- **Tracking (Snowplow):** Self-hosted tracker script URL (`cexp.fpt.com/.../cdp.js`) and **defaults** for collector / `postPath` / app id when not overridden.
 - **OneSignal:** SDK script URL (e.g. `cdn.onesignal.com/.../OneSignalSDK.page.js` major path).
+- **Gamification (default script host):** jsDelivr URL pattern for `cexp-gamification` (version segment may be remote-controlled when allowlisted fields are wired).
 
 **Rationale:** URL or init-pattern changes affect CSP, security, and correctness; they should go through code review and CI.
 
@@ -163,7 +162,7 @@ Even in hybrid mode, a **new hub release** is required when:
 
 - Vendor **breaking** API (init signature, global name, teardown contract) cannot be hidden behind existing config.
 - **CSP / security** policy requires a new script host or path not on the allowlist.
-- You need new **hub logic** (queue rules, identity pipeline, router behavior).
+- You need new **hub logic** (router behavior, plugin lifecycle, queue rules).
 
 ---
 
@@ -176,7 +175,7 @@ The existing `**version` number** on control JSON is for **config identity / cha
 ## Operational playbook (summary)
 
 1. **Routine gamification bump (semver only):** If remote `packageVersion` + `apiKey` are wired and validated → update **backend config** for `sdkId` → no hub release (optional).
-2. **OneSignal channel URL change or Snowplow script URL change:** **Hub release** + tests + deploy CDN/npm.
+2. **OneSignal SDK URL change or gamification default script path change:** **Hub release** + tests + deploy CDN/npm.
 3. **New public `CExP` API:** **Hub SemVer** bump per semver rules + changelog.
 
 ---

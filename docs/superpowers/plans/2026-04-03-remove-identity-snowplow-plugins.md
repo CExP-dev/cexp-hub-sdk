@@ -4,7 +4,7 @@
 
 **Goal:** Remove the `identity` (cdp.js / `fpt_uuid`) and `snowplow` plugins and all hub wiring, types, and tests that exist only to support them, leaving **OneSignal** and **gamification** as the only integrations.
 
-**Architecture:** Drop `snowplow` and `identity` from `IntegrationKey`, control config parsing, `Hub`’s plugin registry order, and `ControlService.getToggles()`. Rewrite `EventRouter` so `track` / `identify` / `reset` delegate only to **onesignal** and **gamification**; remove the Snowplow-specific **identify queue** and the rule that dropped `track`/`page` when Snowplow was off. Remove `IdentityStore` and **public** `CExP.getAnonymousId()` (they existed for anonymous id + Snowplow context). Stop auto-enabling SPA debounced `page` callbacks from `global.ts` (they existed to feed Snowplow `trackPageView`); keep `Hub.enableSpaPageView` / `SpaPageView` for optional future use, but `applyConfig` should not subscribe based on removed toggles. `CExP.page()` may remain as a public API that forwards to `router.page()` (no-op for gamification today).
+**Architecture:** Drop `snowplow` and `identity` from `IntegrationKey`, control config parsing, `Hub`’s plugin registry order, and `ControlService.getToggles()`. Rewrite `EventRouter` so `track` / `identify` / `reset` delegate only to **onesignal** and **gamification**; remove the Snowplow-specific **identify queue** and the rule that dropped `track`/`page` when Snowplow was off. Remove `IdentityStore` and **public** `CExP.getAnonymousId()` (they existed for anonymous id + Snowplow context). **Completed follow-up:** remove **`SpaPageView`** and Hub SPA hooks — automatic `history` listeners are gone; `CExP.page()` is explicit-only and forwards to `router.page()` (gamification may implement `page` or not).
 
 **Tech Stack:** TypeScript, Vitest (`npm test`), `tsc` (`npm run lint`).
 
@@ -21,7 +21,7 @@
 | `src/hub/Hub.ts` | `PLUGIN_ORDER`: `["onesignal", "gamification"]`; `DEFAULT_TOGGLES`; `setToggles` / `deriveTogglesFromControlConfig`; `getContext()` without `getAnonymousId` (keep `getUserId` stub for OneSignal). |
 | `src/hub/ControlService.ts` | `getToggles()` return type omits removed keys. |
 | `src/hub/EventRouter.ts` | Route `track` → gamification when on; `page` → gamification `page` (noop today); `identify` → onesignal + gamification; `reset` → onesignal + gamification; **delete** queue helpers and `IDENTIFY_QUEUE_*` exports or repurpose tests. |
-| `src/global.ts` | Register only `OneSignalPlugin` + `GamificationPlugin`; remove SPA enablement tied to Snowplow; remove `getAnonymousId` from returned API. |
+| `src/global.ts` | Register only `OneSignalPlugin` + `GamificationPlugin`; remove `getAnonymousId` from returned API; no SPA subscription after config. |
 | `src/plugins/types.ts` | `HubContext`: remove `getAnonymousId` (OneSignal keeps `getUserId`). |
 | **Delete** | `src/plugins/snowplow/`, `src/plugins/identity/`, `src/hub/IdentityStore.ts`, `test/SnowplowPlugin.test.ts`, `test/CdpIdentityPlugin.test.ts`, `test/IdentityStore.test.ts`. |
 | `src/plugins/gamification/GamificationPlugin.ts` | Update comment on `page()` that references Snowplow. |
@@ -36,7 +36,7 @@
 2. **`page`:** If `gamification` toggle is on, call `gamification.page` (currently no-op implementation); otherwise no-op. No Snowplow `trackPageView`.
 3. **`identify`:** If `onesignal` on → `onesignal.identify`; if `gamification` on → `gamification.identify`. No queue when a plugin is off.
 4. **`reset`:** Call `onesignal.reset` / `gamification.reset` when respective toggles are on.
-5. **SPA:** `global.ts` `applyConfig` should **not** call `hub.enableSpaPageView` based on config (remove Snowplow gate); call `hub.disableSpaPageView()` or simply never enable after load so automatic history-based page events are off.
+5. **SPA:** Removed from the codebase (`SpaPageView.ts` deleted, Hub no longer exposes SPA subscription APIs). Consumers use **`CExP.page()`** only when they need explicit page payloads.
 
 ---
 
@@ -210,7 +210,7 @@ git commit -m "refactor(router): route events to onesignal and gamification only
 
 - [x] **Step 2: `pluginOverrides`** — only `onesignal` and `gamification`.
 
-- [x] **Step 3: `applyConfig`** — Remove the block that enables SPA page view when `config.integrations.snowplow.enabled`. After `setControlConfig`, call `hub.disableSpaPageView()` (or omit `enableSpaPageView` entirely so SPA is never auto-subscribed).
+- [x] **Step 3: `applyConfig`** — After `setControlConfig`, do not subscribe to SPA history (later: **`SpaPageView` removed** entirely).
 
 - [x] **Step 4: Remove `getAnonymousId`** from the `api` object.
 
@@ -283,7 +283,7 @@ git commit -m "test: align integration tests with two-plugin hub"
 
 ### Task 8: Optional documentation pass (user-triggered)
 
-- [ ] Update `README.md` and consumer guideline bullets that mention `Snowplow`, `cdp.js`, or four integrations — **only if** the user requests doc updates in this repo.
+- [x] Update consumer docs for two-plugin hub — **done 2026-04** (`docs/superpowers/**`, `README.md` guardrails).
 
 ---
 

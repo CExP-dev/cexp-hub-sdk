@@ -20,7 +20,7 @@ This spec intentionally scopes to the control endpoint only (no vendor script se
 ---
 
 ## Non-goals
-- Simulating Snowplow / OneSignal / identity (`cdp.js`) / gamification (`cexp-gamification`) vendor behavior.
+- Simulating OneSignal / gamification (`cexp-gamification`) vendor behavior in depth.
 - Serving the SDK bundle (`dist/browser.global.js`).
 - Varying toggles by `sdkId` (for now); unknown `sdkId` returns the same config payload.
 
@@ -44,10 +44,8 @@ When config is available and the request does not match the current `ETag`, resp
   {
     "version": <number>,
     "integrations": {
-      "snowplow": { "enabled": <boolean> },
       "onesignal": { "enabled": <boolean> },
-      "gamification": { "enabled": <boolean>, "packageVersion"?: <string>, "apiKey"?: <string> },
-      "identity": { "enabled": <boolean> }
+      "gamification": { "enabled": <boolean>, "packageVersion"?: <string>, "apiKey"?: <string> }
     }
   }
   ```
@@ -76,14 +74,12 @@ The file contains exactly the `ControlConfig` JSON object (no wrappers):
 {
   "version": 1,
   "integrations": {
-    "snowplow": { "enabled": false },
     "onesignal": { "enabled": false },
     "gamification": {
       "enabled": true,
       "packageVersion": "1.0.1-beta.10",
       "apiKey": "k_123"
-    },
-    "identity": { "enabled": false }
+    }
   }
 }
 ```
@@ -112,7 +108,7 @@ For `gamification` remote knobs, remember that `tryParseControlConfig()` sanitiz
 
 In practice, the file should always include:
 - `version` as a finite number
-- `integrations` as an object with the four known integration blocks (if missing, the server may fill defaults with `enabled: false`)
+- `integrations` as an object with the **two** known integration blocks (`onesignal`, `gamification`; if missing, the server may fill defaults with `enabled: false`)
 - `enabled` as boolean
 - for `gamification`:
   - `apiKey` is optional (if present but empty/whitespace-only after trimming, it can be omitted from the server response)
