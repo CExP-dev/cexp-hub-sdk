@@ -47,14 +47,14 @@
 - Modify: `src/config/schema.ts`
 - Test: `test/parseControlConfig.test.ts`, `test/control-config-wiring.test.ts`
 
-- [ ] **Step 1: Write failing tests** — In `parseControlConfig.test.ts`, assert that parsed `integrations` has **only** `onesignal` and `gamification` keys (or that `IntegrationToggles` / defaults no longer reference snowplow/identity). Adjust existing cases that expect `snowplow` / `identity` fields.
+- [x] **Step 1: Write failing tests** — In `parseControlConfig.test.ts`, assert that parsed `integrations` has **only** `onesignal` and `gamification` keys (or that `IntegrationToggles` / defaults no longer reference snowplow/identity). Adjust existing cases that expect `snowplow` / `identity` fields.
 
-- [ ] **Step 2: Run tests**
+- [x] **Step 2: Run tests**
 
 Run: `npm test -- test/parseControlConfig.test.ts`
 Expected: FAIL until schema updated.
 
-- [ ] **Step 3: Implement** — Remove `"snowplow"` and `"identity"` from `IntegrationKey`, `INTEGRATION_KEYS`, `IntegrationToggleConfigByKey`, and all default objects in `parseControlConfig`, `tryParseControlConfig`, `areControlConfigsEqual`. In `src/types.ts`, set:
+- [x] **Step 3: Implement** — Remove `"snowplow"` and `"identity"` from `IntegrationKey`, `INTEGRATION_KEYS`, `IntegrationToggleConfigByKey`, and all default objects in `parseControlConfig`, `tryParseControlConfig`, `areControlConfigsEqual`. In `src/types.ts`, set:
 
 ```ts
 export type IntegrationToggles = {
@@ -65,13 +65,13 @@ export type IntegrationToggles = {
 
 Remove `getAnonymousId?` from `CExPApi`.
 
-- [ ] **Step 4: Run tests + lint**
+- [x] **Step 4: Run tests + lint**
 
 Run: `npm test -- test/parseControlConfig.test.ts test/control-config-wiring.test.ts`
 Run: `npm run lint`
 Expected: PASS (fix wiring test fixtures in same commit if needed).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/types.ts src/config/schema.ts test/parseControlConfig.test.ts test/control-config-wiring.test.ts
@@ -87,7 +87,7 @@ git commit -m "refactor(config): drop snowplow and identity from control schema"
 - Modify: `src/hub/ControlService.ts`
 - Test: `test/hub-plugin-registry.test.ts`, `test/hub-spa-page-view.test.ts`
 
-- [ ] **Step 1: Update Hub** — `PLUGIN_ORDER` → `["onesignal", "gamification"]`. `DEFAULT_TOGGLES` two keys. `setToggles` / `deriveTogglesFromControlConfig` / `currentControlConfig` integrations omit removed keys. Remove `import { IdentityStore }`. In `getContext()`, remove `getAnonymousId`; keep:
+- [x] **Step 1: Update Hub** — `PLUGIN_ORDER` → `["onesignal", "gamification"]`. `DEFAULT_TOGGLES` two keys. `setToggles` / `deriveTogglesFromControlConfig` / `currentControlConfig` integrations omit removed keys. Remove `import { IdentityStore }`. In `getContext()`, remove `getAnonymousId`; keep:
 
 ```ts
 getToggles: () => this.currentToggles ?? DEFAULT_TOGGLES,
@@ -96,16 +96,16 @@ getUserId: () => null,
 
 (Adjust if `HubContext` still requires a shape change in Task 3.)
 
-- [ ] **Step 2: Update ControlService.getToggles()** — Return type and object with only `onesignal` and `gamification`.
+- [x] **Step 2: Update ControlService.getToggles()** — Return type and object with only `onesignal` and `gamification`.
 
-- [ ] **Step 3: Fix tests** — Replace toggle objects in `hub-plugin-registry.test.ts` and `hub-spa-page-view.test.ts` (remove `snowplow`, `identity` from `setToggles` calls). Update plugin override keys in registry tests.
+- [x] **Step 3: Fix tests** — Replace toggle objects in `hub-plugin-registry.test.ts` and `hub-spa-page-view.test.ts` (remove `snowplow`, `identity` from `setToggles` calls). Update plugin override keys in registry tests.
 
-- [ ] **Step 4: Run**
+- [x] **Step 4: Run**
 
 Run: `npm test -- test/hub-plugin-registry.test.ts test/hub-spa-page-view.test.ts`
 Run: `npm run lint`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/hub/Hub.ts src/hub/ControlService.ts test/hub-plugin-registry.test.ts test/hub-spa-page-view.test.ts
