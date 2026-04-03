@@ -43,4 +43,31 @@ describe("CExP public surface", () => {
 
     expect(() => CExP.track("purchase", { amount: 10 })).not.toThrow();
   });
+
+  it("identify after first config resolves does not throw", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            version: 1,
+            integrations: {
+              onesignal: { enabled: false },
+              gamification: { enabled: false },
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json", etag: "v1" } },
+        ),
+      ),
+    );
+
+    const CExP = createCExP();
+    CExP.init({ id: "sdk-1" });
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(fetch)).toHaveBeenCalled();
+    });
+
+    expect(() => CExP.identify("user-42", { plan: "pro" })).not.toThrow();
+  });
 });

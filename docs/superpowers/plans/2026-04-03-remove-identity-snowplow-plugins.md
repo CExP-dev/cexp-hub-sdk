@@ -272,7 +272,7 @@ Run: `npm test`
 Run: `npm run lint`
 Run: `npm run build`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add test/global-api.test.ts test/ControlService.test.ts
