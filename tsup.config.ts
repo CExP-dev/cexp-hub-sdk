@@ -1,10 +1,10 @@
 import { defineConfig } from "tsup";
 
 export default defineConfig([
-  // ESM build: exports the module surface (no global attachment).
+  // ESM + CJS: dual package for import / require (e.g. jsDelivr, Node CJS).
   {
     entry: ["src/index.ts"],
-    format: ["esm"],
+    format: ["esm", "cjs"],
     sourcemap: true,
     clean: true,
     splitting: false,
