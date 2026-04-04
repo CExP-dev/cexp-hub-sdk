@@ -1,6 +1,6 @@
 import { createCExP } from "./global";
 
-// Browser/IIFE entry: attach unconditionally for `window.CExP`.
+// Browser/IIFE entry: classic <script src> exposes `window.CExP` (no ES modules).
 const CExP = createCExP();
-(globalThis as unknown as { CExP: typeof CExP }).CExP = CExP;
+(window as unknown as { CExP: typeof CExP }).CExP = CExP;
 

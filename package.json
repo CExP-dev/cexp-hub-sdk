@@ -17,6 +17,7 @@
   },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
+  "browser": "./dist/browser.global.js",
   "types": "./dist/index.d.ts",
   "files": [
     "dist"
@@ -37,6 +38,10 @@
       }
     },
     "./iife": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/browser.global.js"
+    },
+    "./browser": {
       "types": "./dist/index.d.ts",
       "default": "./dist/browser.global.js"
     }

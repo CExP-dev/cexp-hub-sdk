@@ -10,11 +10,12 @@ export default defineConfig([
     splitting: false,
     dts: true,
   },
-  // IIFE build: attaches `window.CExP` unconditionally.
+  // IIFE build: single file for <script src="..."> (older browsers, no module graph).
   {
     entry: ["src/browser.ts"],
     format: ["iife"],
     globalName: "CExP",
+    target: "es2018",
     sourcemap: true,
     clean: false,
     splitting: false,
