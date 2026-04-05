@@ -1,6 +1,7 @@
 import type { HubContext, Plugin } from "../types";
 
-const ONESIGNAL_SCRIPT_URL = "https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js";
+const ONESIGNAL_SCRIPT_URL =
+  "https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js";
 const SCRIPT_MARKER_ATTR = "data-cexp-onesignal";
 /** Marks the inline bootstrap so DevTools shows the same two-tag pattern as OneSignal’s embed docs. */
 const SCRIPT_INLINE_MARKER_ATTR = "data-cexp-onesignal-inline";
@@ -15,15 +16,20 @@ type OneSignalLike = {
   logout?: () => Promise<void> | void;
 };
 
-type OneSignalDeferredQueue = Array<(oneSignal: OneSignalLike) => void | Promise<void>>;
+type OneSignalDeferredQueue = Array<
+  (oneSignal: OneSignalLike) => void | Promise<void>
+>;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseOneSignalConfig(config: unknown): Required<Pick<OneSignalIntegrationConfig, "appId">> {
+function parseOneSignalConfig(
+  config: unknown,
+): Required<Pick<OneSignalIntegrationConfig, "appId">> {
   const c = isPlainObject(config) ? config : {};
-  const appId = typeof c.appId === "string" && c.appId.length > 0 ? c.appId : "";
+  const appId =
+    typeof c.appId === "string" && c.appId.length > 0 ? c.appId : "";
   return { appId };
 }
 
@@ -52,7 +58,6 @@ function ensureOneSignalDeferredBootstrapInline(): void {
   script.setAttribute(SCRIPT_INLINE_MARKER_ATTR, "true");
   script.textContent = [
     "window.OneSignalDeferred = window.OneSignalDeferred || [];",
-    "// cexp-hub-sdk: init/login handlers are pushed from the SDK before the SDK script loads.",
   ].join("\n");
   document.head.appendChild(script);
 }
@@ -62,7 +67,9 @@ function ensureOneSignalScriptLoaded(): Promise<void> {
     return Promise.resolve();
   }
 
-  const existing = document.querySelector<HTMLScriptElement>(`script[src="${ONESIGNAL_SCRIPT_URL}"]`);
+  const existing = document.querySelector<HTMLScriptElement>(
+    `script[src="${ONESIGNAL_SCRIPT_URL}"]`,
+  );
   if (existing?.getAttribute(SCRIPT_MARKER_ATTR) === "true") {
     return Promise.resolve();
   }
@@ -74,7 +81,9 @@ function ensureOneSignalScriptLoaded(): Promise<void> {
           existing.setAttribute(SCRIPT_MARKER_ATTR, "true");
           resolve();
         } else {
-          reject(new Error("[OneSignalPlugin] OneSignal SDK script failed to load"));
+          reject(
+            new Error("[OneSignalPlugin] OneSignal SDK script failed to load"),
+          );
         }
       };
 
@@ -94,7 +103,9 @@ function ensureOneSignalScriptLoaded(): Promise<void> {
         resolve();
       } else {
         script.remove();
-        reject(new Error("[OneSignalPlugin] OneSignal SDK script failed to load"));
+        reject(
+          new Error("[OneSignalPlugin] OneSignal SDK script failed to load"),
+        );
       }
     };
 
@@ -197,9 +208,15 @@ export class OneSignalPlugin implements Plugin {
 
     if (typeof document !== "undefined") {
       document
-        .querySelectorAll<HTMLScriptElement>(`script[${SCRIPT_INLINE_MARKER_ATTR}="true"]`)
+        .querySelectorAll<HTMLScriptElement>(
+          `script[${SCRIPT_INLINE_MARKER_ATTR}="true"]`,
+        )
         .forEach((el) => el.remove());
-      document.querySelectorAll<HTMLScriptElement>(`script[src="${ONESIGNAL_SCRIPT_URL}"]`).forEach((el) => el.remove());
+      document
+        .querySelectorAll<HTMLScriptElement>(
+          `script[src="${ONESIGNAL_SCRIPT_URL}"]`,
+        )
+        .forEach((el) => el.remove());
     }
 
     const w = globalThis as unknown as {
@@ -219,13 +236,18 @@ export class OneSignalPlugin implements Plugin {
     }
   }
 
-  private async applyLogin(oneSignal: OneSignalLike, userId: string): Promise<void> {
+  private async applyLogin(
+    oneSignal: OneSignalLike,
+    userId: string,
+  ): Promise<void> {
     try {
       if (typeof oneSignal.login === "function") {
         await oneSignal.login(userId);
         return;
       }
-      const legacy = oneSignal as unknown as { setExternalUserId?: (id: string) => Promise<void> | void };
+      const legacy = oneSignal as unknown as {
+        setExternalUserId?: (id: string) => Promise<void> | void;
+      };
       if (typeof legacy.setExternalUserId === "function") {
         await legacy.setExternalUserId(userId);
       }
@@ -240,7 +262,9 @@ export class OneSignalPlugin implements Plugin {
         await oneSignal.logout();
         return;
       }
-      const legacy = oneSignal as unknown as { removeExternalUserId?: () => Promise<void> | void };
+      const legacy = oneSignal as unknown as {
+        removeExternalUserId?: () => Promise<void> | void;
+      };
       if (typeof legacy.removeExternalUserId === "function") {
         await legacy.removeExternalUserId();
       }
