@@ -1,6 +1,6 @@
 # `cexp-be` mock server — control config endpoint
 
-**Status:** Draft for review
+**Status:** Implemented in [`cexp-be`](../../../../cexp-be) (see [`README.md`](../../../../cexp-be/README.md)); keep this spec aligned with code changes.
 
 **Related:** [`cexp-hub-sdk` `ControlService`](../src/hub/ControlService.ts) and [`ControlConfig` schema](../src/config/schema.ts)
 
@@ -44,11 +44,17 @@ When config is available and the request does not match the current `ETag`, resp
   {
     "version": <number>,
     "integrations": {
-      "onesignal": { "enabled": <boolean> },
-      "gamification": { "enabled": <boolean>, "packageVersion"?: <string>, "apiKey"?: <string> }
+      "onesignal": { "enabled": <boolean>, "appId"?: <string> },
+      "gamification": {
+        "enabled": <boolean>,
+        "packageVersion"?: <string>,
+        "clientKey"?: <string>,
+        "tokenBaseUrl"?: <string>
+      }
     }
   }
   ```
+  Optional gamification fields follow the same rules as `tryParseControlConfig()` (see [2026-03-30-version-management-design.md](./2026-03-30-version-management-design.md), section **Gamification CDP access token**).
 
 ### Response: `304 Not Modified`
 If the request header `If-None-Match` equals the current `ETag`:
@@ -69,7 +75,9 @@ The server reads a single JSON file from disk. The server should support configu
 - environment variable `CEFX_MOCK_CONFIG_PATH` (suggested name)
 
 ### Shape
-The file contains exactly the `ControlConfig` JSON object (no wrappers):
+The file contains exactly the `ControlConfig` JSON object (no wrappers). The **`cexp-be` mock** does not read or emit legacy **`apiKey`**; use **`clientKey`** + **`tokenBaseUrl`** for the CDP JWT flow (same allowlisting as hub `safeTokenBaseUrl`), or only **`enabled`** / **`packageVersion`** as needed. Production control APIs may still return `apiKey` for the real SDK.
+
+Example (CDP fields):
 ```json
 {
   "version": 1,
@@ -78,7 +86,8 @@ The file contains exactly the `ControlConfig` JSON object (no wrappers):
     "gamification": {
       "enabled": true,
       "packageVersion": "1.0.1-beta.10",
-      "apiKey": "k_123"
+      "clientKey": "ck_example",
+      "tokenBaseUrl": "https://staging-cexp.cads.live/gamification"
     }
   }
 }
@@ -111,15 +120,16 @@ In practice, the file should always include:
 - `integrations` as an object with the **two** known integration blocks (`onesignal`, `gamification`; if missing, the server may fill defaults with `enabled: false`)
 - `enabled` as boolean
 - for `gamification`:
-  - `apiKey` is optional (if present but empty/whitespace-only after trimming, it can be omitted from the server response)
-  - `packageVersion` is optional (if present but invalid/unallowlisted/too long, it can be omitted from the server response)
+  - `packageVersion` is optional (if invalid/unallowlisted/too long, omit)
+  - `clientKey` is optional (non-empty trimmed string, else omit)
+  - `tokenBaseUrl` is optional (`https` on allowlisted host, `/gamification` path prefix; else omit — same as hub `safeTokenBaseUrl`)
 
 ---
 
 ## ETag generation rules
 To ensure the SDK’s polling detects changes correctly:
 - The server computes the `ETag` from the exact JSON response string that it would send on a `200`.
-- ETag MUST change when any relevant field changes (including `gamification.packageVersion` / `gamification.apiKey`).
+- ETag MUST change when any relevant field changes (including `gamification.packageVersion`, `gamification.clientKey`, `gamification.tokenBaseUrl`; production payloads may also include `gamification.apiKey`, which this mock does not emit).
 - The mock MUST treat the incoming/outgoing `ETag` values as opaque strings:
   - The `etag` response header value is compared byte-for-byte to the raw `If-None-Match` header value from the request.
   - ETag formatting (including quoting) is not normalized.
@@ -136,7 +146,7 @@ Implementation guidance:
 - each integration block present in the response is a plain object
 - each integration block’s `enabled` value is a JSON boolean
 - for `gamification`:
-  - `apiKey` and `packageVersion` are optional inputs; if `apiKey` becomes empty after trimming or `packageVersion` is unallowlisted/too long, `tryParseControlConfig()` sanitizes them (treating them as absent) rather than failing the whole parse
+  - `packageVersion`, `clientKey`, and `tokenBaseUrl` are optional; invalid values are omitted by `tryParseControlConfig()` rather than failing the whole parse
   - the only hard structural requirements are `gamification` being a plain object and `gamification.enabled` being a boolean
 
 To avoid ETag/body changes that don’t translate into SDK state changes, the server SHOULD compute the response JSON (and ETag) from the normalized/sanitized values it plans to return (i.e., omit optional gamification fields when they are invalid/empty).
@@ -176,7 +186,7 @@ Example manual verification:
   - reload without restart updates response
 - SDK-side tests (recommended):
   - Create a small harness that points `ControlService({ controlUrl: mockServerUrl, ... })` at this server and verifies that:
-    - toggling `gamification.enabled` or `gamification.packageVersion/apiKey` causes `onUpdate` to fire (polling change detection)
+    - toggling `gamification.enabled` or `gamification.packageVersion` / `clientKey` / `tokenBaseUrl` causes `onUpdate` to fire (polling change detection; `apiKey` only applies to production-shaped configs, not this mock)
 
 ---
 
@@ -186,5 +196,5 @@ None.
 ---
 
 ## Approval
-Ready for reviewer approval before implementation.
+Initial design approved; ongoing changes should stay consistent with `cexp-be` and `cexp-hub-sdk` `tryParseControlConfig()`.
 

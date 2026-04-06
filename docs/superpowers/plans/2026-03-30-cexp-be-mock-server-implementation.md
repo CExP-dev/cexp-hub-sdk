@@ -3,6 +3,8 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
 > **Goal:** Create a local `cexp-be` mock server that serves the control endpoint `GET /v1/sdk-config?sdkId=...` for `cexp-hub-sdk`, including `ETag`/`If-None-Match` + `304` and reload-without-restart from a JSON file.
+>
+> **Normative control JSON rules:** Every `200` body must be strict-parseable by `cexp-hub-sdk` `tryParseControlConfig()`. The mock normalizes optional gamification fields like [`src/config/schema.ts`](../../../src/config/schema.ts) (`packageVersion`, `clientKey`, `tokenBaseUrl`). **`apiKey` is not read or emitted by `cexp-be`** (legacy static key); use `clientKey` + `tokenBaseUrl` for the CDP JWT path in local configs — see [`cexp-be` README](../../../../cexp-be/README.md). Product context: [../specs/2026-03-30-version-management-design.md](../specs/2026-03-30-version-management-design.md) (Layer 2–3, CDP token section); [2026-04-06-gamification-access-token-implementation.md](./2026-04-06-gamification-access-token-implementation.md).
 
 **Architecture:** Use Node.js + Express. A config loader reads and sanitizes a local JSON file into a “response snapshot” (serialized JSON + derived ETag). The HTTP handler serves from the snapshot, and the loader updates the snapshot when the config file changes (fs watcher).
 
@@ -29,9 +31,10 @@ Assume the server supports:
 Create `test/control-endpoint.fallback.test.ts` with assertions:
 1. `GET /v1/sdk-config?sdkId=anything` returns `200`
 2. `content-type` contains `application/json`
-3. Body matches the `ControlConfig` shape:
+3. Body matches the `ControlConfig` shape (hub-aligned: only `onesignal` + `gamification` keys):
    - `version` is `0` (fallback)
    - `integrations.onesignal.enabled` and `integrations.gamification.enabled` are both `false`
+   - no optional gamification fields on the fallback snapshot
 4. Response includes an `etag` header (non-empty string)
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -91,7 +94,7 @@ In `test/control-endpoint.reload.test.ts`:
 2. Start the app with `process.env.CEFX_MOCK_CONFIG_PATH` pointing to it.
 3. `GET /v1/sdk-config?sdkId=test` returns `200` and body reflects the file config.
 4. Capture initial `etag` and body.
-5. Update the file contents on disk (e.g., flip `integrations.gamification.enabled` and/or `packageVersion`/`apiKey`).
+5. Update the file contents on disk (e.g., flip `integrations.gamification.enabled` and/or `packageVersion` / `clientKey` / `tokenBaseUrl`).
 6. Wait briefly (use a small retry loop) until the next request returns the updated JSON and `etag` differs.
 
 Expected: FAIL (reload logic not implemented yet).
@@ -114,15 +117,19 @@ Implement:
      - parsed JSON must be a non-null plain object (reject arrays/primitives)
      - `version` must be a finite number (otherwise treat reload as failure)
      - `integrations` must be a plain object (otherwise treat reload as failure)
-     - unknown integration keys must be ignored; emitted response must include exactly the four keys expected by `cexp-hub-sdk` `ControlConfig`:
-       - `snowplow`, `onesignal`, `identity`, `gamification`
+     - unknown integration keys must be ignored; emitted response must include exactly the keys in `cexp-hub-sdk` `ControlConfig.integrations`:
+       - `onesignal`, `gamification`
      - for each integration key:
        - if the block is missing: treat as disabled (`enabled: false`)
        - if present: must be a plain object
        - `enabled` must be a JSON boolean (otherwise treat reload as failure)
-     - for `gamification` only:
-       - `apiKey`: include only if it is a string whose trimmed value is non-empty; otherwise omit
+     - for `onesignal` only:
+       - `appId`: include only if it is a string whose trimmed value is non-empty; otherwise omit
+     - for `gamification` only (mirror `schema.ts` optional-field rules / [version management](../specs/2026-03-30-version-management-design.md#gamification-cdp-access-token)):
+       - **`apiKey`:** not supported in this mock (do not read or emit; production control APIs may still set it)
        - `packageVersion`: include only if it matches regex `^[0-9A-Za-z][0-9A-Za-z+._-]*$` and length <= `128`; otherwise omit
+       - `clientKey`: include only if it is a string whose trimmed value is non-empty; otherwise omit
+       - `tokenBaseUrl`: include only if it passes hub `safeTokenBaseUrl` rules (`https` only, `*.cads.live` host, pathname prefix `/gamification`, strip trailing slash / normalize; max length 512); otherwise omit
 2. `configWatcher.ts`:
    - initial load into an in-memory snapshot
    - uses `fs.watch` to detect changes
@@ -253,7 +260,7 @@ If no doc tests exist, use a “manual check” step in the plan.
 Test idea:
 - Spin the mock server
 - Instantiate `cexp-hub-sdk` `ControlService` in a test harness (Node/jsdom)
-- Verify that polling triggers `onUpdate` when `gamification.apiKey` or `packageVersion` changes.
+- Verify that polling triggers `onUpdate` when `gamification.packageVersion`, `clientKey`, or `tokenBaseUrl` changes (and/or `enabled`; align with hub equality — production may also use `apiKey`, which this mock does not serve).
 
 This test may be optional if it’s brittle across environments.
 

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { parseControlConfig } from "../src/config/schema";
+import {
+  areControlConfigsEqual,
+  parseControlConfig,
+  tryParseControlConfig,
+} from "../src/config/schema";
 import type { ControlConfig } from "../src/config/schema";
 
 const expectedDefaults: ControlConfig = {
@@ -133,5 +137,105 @@ describe("parseControlConfig schema safety", () => {
     });
 
     expect(parsed.integrations.gamification).toEqual({ enabled: true, apiKey: "k_123" });
+  });
+
+  it("preserves valid gamification clientKey and tokenBaseUrl", () => {
+    const parsed = parseControlConfig({
+      version: 4,
+      integrations: {
+        gamification: {
+          enabled: true,
+          clientKey: " ck_abc ",
+          tokenBaseUrl: "https://staging-cexp.cads.live/gamification/",
+          apiKey: "k_static",
+        },
+      },
+    });
+
+    expect(parsed.integrations.gamification).toEqual({
+      enabled: true,
+      clientKey: "ck_abc",
+      tokenBaseUrl: "https://staging-cexp.cads.live/gamification",
+      apiKey: "k_static",
+    });
+  });
+
+  it("drops invalid gamification.tokenBaseUrl but keeps other fields", () => {
+    const parsed = parseControlConfig({
+      version: 1,
+      integrations: {
+        gamification: {
+          enabled: true,
+          apiKey: "k_123",
+          tokenBaseUrl: "http://staging-cexp.cads.live/gamification",
+          clientKey: "ck",
+        },
+      },
+    });
+
+    expect(parsed.integrations.gamification).toEqual({
+      enabled: true,
+      apiKey: "k_123",
+      clientKey: "ck",
+    });
+  });
+
+  it("preserves apiKey-only gamification configs when CDP fields are absent", () => {
+    const parsed = parseControlConfig({
+      version: 2,
+      integrations: {
+        gamification: { enabled: true, packageVersion: "1.0.1-beta.10", apiKey: "k_123" },
+      },
+    });
+
+    expect(parsed.integrations.gamification).toEqual({
+      enabled: true,
+      packageVersion: "1.0.1-beta.10",
+      apiKey: "k_123",
+    });
+  });
+
+  it("tryParseControlConfig preserves sanitized gamification token fields", () => {
+    const parsed = tryParseControlConfig({
+      version: 1,
+      integrations: {
+        gamification: {
+          enabled: true,
+          clientKey: "ck",
+          tokenBaseUrl: "https://prod-cexp.cads.live/gamification",
+        },
+      },
+    });
+
+    expect(parsed?.integrations.gamification).toEqual({
+      enabled: true,
+      clientKey: "ck",
+      tokenBaseUrl: "https://prod-cexp.cads.live/gamification",
+    });
+  });
+
+  it("areControlConfigsEqual compares clientKey and tokenBaseUrl", () => {
+    const a: ControlConfig = {
+      version: 1,
+      integrations: {
+        onesignal: { enabled: false },
+        gamification: {
+          enabled: true,
+          clientKey: "a",
+          tokenBaseUrl: "https://x.cads.live/gamification",
+        },
+      },
+    };
+    const b: ControlConfig = {
+      ...a,
+      integrations: {
+        ...a.integrations,
+        gamification: {
+          ...a.integrations.gamification,
+          tokenBaseUrl: "https://y.cads.live/gamification",
+        },
+      },
+    };
+    expect(areControlConfigsEqual(a, b)).toBe(false);
   });
 });

@@ -1,15 +1,35 @@
 import type { HubContext, Plugin } from "../types";
 
+import {
+  decodeJwtExpSeconds,
+  fetchGamificationAccessToken,
+  msUntilRefresh,
+} from "./gamificationToken";
+
 const SCRIPT_MARKER_ATTR = "data-cexp-gamification";
 
 const DEFAULT_PACKAGE_VERSION = "1.0.1-beta.9";
+
+/** Skew before JWT `exp` when scheduling refresh (v1 “A-only”). */
+const TOKEN_REFRESH_SKEW_MS = 60_000;
 
 export type GamificationIntegrationConfig = {
   /**
    * npm dist-tag or semver for `cexp-gamification` on jsDelivr.
    */
   packageVersion?: string;
-  apiKey?: string;
+  clientKey?: string;
+  tokenBaseUrl?: string;
+};
+
+/**
+ * Normalized plugin config. CDP JWT is used when **`clientKey`** and **`tokenBaseUrl`**
+ * are both non-empty; otherwise the static **`apiKey`** string is passed to the vendor SDK.
+ */
+type ParsedGamificationConfig = {
+  packageVersion: string;
+  clientKey: string;
+  tokenBaseUrl: string;
 };
 
 type CexpInstance = {
@@ -21,16 +41,37 @@ type CexpInstance = {
 
 type CexpCtor = new (opts: { apiKey: string }) => CexpInstance;
 
+export type GamificationPluginOptions = {
+  /** Injected for unit tests; defaults to `globalThis.fetch`. */
+  fetchImpl?: typeof fetch;
+};
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseGamificationConfig(config: unknown): Required<GamificationIntegrationConfig> {
+/**
+ * When **`clientKey`** and **`tokenBaseUrl`** are both set, remote **`apiKey`** is not used for SDK init.
+ */
+function parseGamificationConfig(config: unknown): ParsedGamificationConfig {
   const c = isPlainObject(config) ? config : {};
   const packageVersion =
-    typeof c.packageVersion === "string" && c.packageVersion.length > 0 ? c.packageVersion : DEFAULT_PACKAGE_VERSION;
-  const apiKey = typeof c.apiKey === "string" && c.apiKey.length > 0 ? c.apiKey : "";
-  return { packageVersion, apiKey };
+    typeof c.packageVersion === "string" && c.packageVersion.length > 0
+      ? c.packageVersion
+      : DEFAULT_PACKAGE_VERSION;
+  const clientKey =
+    typeof c.clientKey === "string" && c.clientKey.trim().length > 0
+      ? c.clientKey.trim()
+      : "";
+  const tokenBaseUrl =
+    typeof c.tokenBaseUrl === "string" && c.tokenBaseUrl.trim().length > 0
+      ? c.tokenBaseUrl.trim()
+      : "";
+  return { packageVersion, clientKey, tokenBaseUrl };
+}
+
+function usesCdpJwt(cfg: ParsedGamificationConfig): boolean {
+  return cfg.clientKey.length > 0 && cfg.tokenBaseUrl.length > 0;
 }
 
 function buildGamificationScriptUrl(version: string): string {
@@ -47,7 +88,9 @@ function ensureGamificationScriptLoaded(scriptUrl: string): Promise<void> {
     return Promise.resolve();
   }
 
-  const existing = document.querySelector<HTMLScriptElement>(`script[src="${scriptUrl}"]`);
+  const existing = document.querySelector<HTMLScriptElement>(
+    `script[src="${scriptUrl}"]`
+  );
   if (existing?.getAttribute(SCRIPT_MARKER_ATTR) === "true") {
     return Promise.resolve();
   }
@@ -59,7 +102,11 @@ function ensureGamificationScriptLoaded(scriptUrl: string): Promise<void> {
           existing.setAttribute(SCRIPT_MARKER_ATTR, "true");
           resolve();
         } else {
-          reject(new Error("[GamificationPlugin] gamification SDK script failed to load"));
+          reject(
+            new Error(
+              "[GamificationPlugin] gamification SDK script failed to load"
+            )
+          );
         }
       };
 
@@ -79,7 +126,11 @@ function ensureGamificationScriptLoaded(scriptUrl: string): Promise<void> {
         resolve();
       } else {
         script.remove();
-        reject(new Error("[GamificationPlugin] gamification SDK script failed to load"));
+        reject(
+          new Error(
+            "[GamificationPlugin] gamification SDK script failed to load"
+          )
+        );
       }
     };
 
@@ -90,7 +141,9 @@ function ensureGamificationScriptLoaded(scriptUrl: string): Promise<void> {
   });
 }
 
-async function waitForCexpConstructor(timeoutMs: number): Promise<CexpCtor | undefined> {
+async function waitForCexpConstructor(
+  timeoutMs: number
+): Promise<CexpCtor | undefined> {
   const start = Date.now();
   // eslint-disable-next-line no-constant-condition
   while (true) {
@@ -108,11 +161,18 @@ async function waitForCexpConstructor(timeoutMs: number): Promise<CexpCtor | und
 export class GamificationPlugin implements Plugin {
   public readonly name = "gamification";
 
-  private cfg!: ReturnType<typeof parseGamificationConfig>;
+  private cfg!: ParsedGamificationConfig;
+
+  private readonly fetchImpl: typeof fetch;
 
   private active = false;
   private client: CexpInstance | undefined;
   private scriptUrl = "";
+  private refreshTimerId: ReturnType<typeof setTimeout> | undefined;
+
+  constructor(options: GamificationPluginOptions = {}) {
+    this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
+  }
 
   init(_ctx: HubContext, config: unknown): void {
     void _ctx;
@@ -160,8 +220,52 @@ export class GamificationPlugin implements Plugin {
     this.disable();
   }
 
+  private clearRefreshTimer(): void {
+    if (this.refreshTimerId !== undefined) {
+      clearTimeout(this.refreshTimerId);
+      this.refreshTimerId = undefined;
+    }
+  }
+
   private async enable(): Promise<void> {
-    if (!this.active || !this.cfg.apiKey) return;
+    if (!this.active) return;
+
+    let jwt: string | undefined;
+    if (usesCdpJwt(this.cfg)) {
+      try {
+        jwt = await fetchGamificationAccessToken({
+          tokenBaseUrl: this.cfg.tokenBaseUrl,
+          clientKey: this.cfg.clientKey,
+          fetcher: this.fetchImpl,
+        });
+      } catch {
+        console.error("Gamification: token fetch failed");
+        return;
+      }
+
+      if (!this.active) return;
+
+      await this.loadScriptAndInitVendor(jwt, true);
+      return;
+    }
+
+    // if (!this.cfg.apiKey) {
+    //   console.error("Gamification: not active or apiKey is not set");
+    //   return;
+    // }
+
+    // await this.loadScriptAndInitVendor(this.cfg.apiKey, false);
+  }
+
+  /**
+   * @param vendorApiKey — JWT from CDP or static key from control JSON (vendor ctor name is `apiKey`).
+   * @param scheduleJwtRefresh — after init, schedule refresh from JWT `exp` (CDP path only).
+   */
+  private async loadScriptAndInitVendor(
+    vendorApiKey: string,
+    scheduleJwtRefresh: boolean
+  ): Promise<void> {
+    if (!this.active) return;
 
     this.scriptUrl = buildGamificationScriptUrl(this.cfg.packageVersion);
 
@@ -177,17 +281,76 @@ export class GamificationPlugin implements Plugin {
     if (!this.active || !Ctor) return;
 
     try {
-      this.client = new Ctor({ apiKey: this.cfg.apiKey });
+      this.client = new Ctor({ apiKey: vendorApiKey });
       const init = this.client.init;
       if (typeof init === "function") {
         await init.call(this.client);
+      }
+      if (scheduleJwtRefresh && usesCdpJwt(this.cfg)) {
+        this.scheduleTokenRefreshFromJwt(vendorApiKey);
       }
     } catch {
       this.client = undefined;
     }
   }
 
+  private scheduleTokenRefreshFromJwt(jwt: string): void {
+    this.clearRefreshTimer();
+    const exp = decodeJwtExpSeconds(jwt);
+    if (exp === undefined) return;
+
+    const delay = msUntilRefresh(exp, TOKEN_REFRESH_SKEW_MS, Date.now());
+    this.refreshTimerId = setTimeout(() => {
+      this.refreshTimerId = undefined;
+      void this.refreshAccessToken();
+    }, delay);
+  }
+
+  private async refreshAccessToken(): Promise<void> {
+    if (!this.active || !usesCdpJwt(this.cfg)) return;
+
+    let jwt: string;
+    try {
+      jwt = await fetchGamificationAccessToken({
+        tokenBaseUrl: this.cfg.tokenBaseUrl,
+        clientKey: this.cfg.clientKey,
+        fetcher: this.fetchImpl,
+      });
+    } catch {
+      console.error("Gamification: token refresh failed");
+      return;
+    }
+
+    if (!this.active) return;
+
+    const c = this.client;
+    this.client = undefined;
+    if (c?.destroy) {
+      try {
+        c.destroy();
+      } catch {
+        // ignore
+      }
+    }
+
+    const Ctor = getCexpConstructor();
+    if (!this.active || !Ctor) return;
+
+    try {
+      this.client = new Ctor({ apiKey: jwt });
+      const init = this.client.init;
+      if (typeof init === "function") {
+        await init.call(this.client);
+      }
+      this.scheduleTokenRefreshFromJwt(jwt);
+    } catch {
+      this.client = undefined;
+    }
+  }
+
   private disable(): void {
+    this.clearRefreshTimer();
+
     this.active = false;
 
     const c = this.client;
@@ -202,7 +365,9 @@ export class GamificationPlugin implements Plugin {
     }
 
     if (typeof document !== "undefined" && this.scriptUrl) {
-      document.querySelectorAll<HTMLScriptElement>(`script[src="${this.scriptUrl}"]`).forEach((el) => el.remove());
+      document
+        .querySelectorAll<HTMLScriptElement>(`script[src="${this.scriptUrl}"]`)
+        .forEach((el) => el.remove());
     }
 
     this.scriptUrl = "";

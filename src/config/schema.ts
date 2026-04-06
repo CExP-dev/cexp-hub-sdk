@@ -22,6 +22,16 @@ export interface GamificationIntegrationToggleConfig extends BasicIntegrationTog
    * Validated defensively during parsing.
    */
   apiKey?: string;
+  /**
+   * CDP client key for JWT token flow (`GET {tokenBaseUrl}/sv/token`).
+   * Validated defensively during parsing.
+   */
+  clientKey?: string;
+  /**
+   * HTTPS base URL (origin + `/gamification` path prefix) for the CDP token endpoint in this environment.
+   * Validated defensively during parsing (host/path allowlist, `https` only, no trailing slash).
+   */
+  tokenBaseUrl?: string;
 }
 
 export interface IntegrationToggleConfigByKey {
@@ -66,6 +76,43 @@ const safeNonEmptyString = (value: unknown): string | undefined => {
 const GAMIFICATION_PACKAGE_VERSION_ALLOWLIST = /^[0-9A-Za-z][0-9A-Za-z+._-]*$/;
 const GAMIFICATION_PACKAGE_VERSION_MAX_LENGTH = 128;
 
+/** Agreed with platform security: `*.cads.live` and path prefix `/gamification`. */
+const GAMIFICATION_TOKEN_BASE_URL_MAX_LENGTH = 512;
+
+const isAllowedGamificationTokenHost = (hostname: string): boolean => {
+  const h = hostname.toLowerCase();
+  return h === "cads.live" || h.endsWith(".cads.live");
+};
+
+/**
+ * Accepts `https` URLs on allowlisted hosts with pathname prefix `/gamification`.
+ * Strips trailing slashes and drops URL `search` / `hash` so the stored value is stable.
+ */
+const safeTokenBaseUrl = (value: unknown): string | undefined => {
+  if (typeof value !== "string") return undefined;
+  if (value.length > GAMIFICATION_TOKEN_BASE_URL_MAX_LENGTH) return undefined;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return undefined;
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== "https:") return undefined;
+  if (!isAllowedGamificationTokenHost(url.hostname)) return undefined;
+  url.username = "";
+  url.password = "";
+  url.hash = "";
+  url.search = "";
+  let pathname = url.pathname.replace(/\/+$/, "");
+  if (pathname.length === 0) pathname = "/";
+  if (!pathname.startsWith("/gamification")) return undefined;
+  url.pathname = pathname;
+  const serialized = url.toString().replace(/\/+$/, "");
+  return serialized.length > 0 ? serialized : undefined;
+};
+
 const safePackageVersion = (value: unknown): string | undefined => {
   if (typeof value !== "string") return undefined;
   if (value.length > GAMIFICATION_PACKAGE_VERSION_MAX_LENGTH) return undefined;
@@ -104,10 +151,14 @@ export function parseControlConfig(input: unknown): ControlConfig {
     if (key === "gamification") {
       const apiKey = isRecord(block) ? safeNonEmptyString(block.apiKey) : undefined;
       const packageVersion = isRecord(block) ? safePackageVersion(block.packageVersion) : undefined;
+      const clientKey = isRecord(block) ? safeNonEmptyString(block.clientKey) : undefined;
+      const tokenBaseUrl = isRecord(block) ? safeTokenBaseUrl(block.tokenBaseUrl) : undefined;
 
       const gamification: GamificationIntegrationToggleConfig = { enabled: enabled ?? false };
       if (apiKey !== undefined) gamification.apiKey = apiKey;
       if (packageVersion !== undefined) gamification.packageVersion = packageVersion;
+      if (clientKey !== undefined) gamification.clientKey = clientKey;
+      if (tokenBaseUrl !== undefined) gamification.tokenBaseUrl = tokenBaseUrl;
 
       integrations.gamification = gamification;
     } else {
@@ -166,10 +217,14 @@ export function tryParseControlConfig(input: unknown): ControlConfig | undefined
       if (key === "gamification") {
         const apiKey = safeNonEmptyString((block as Record<string, unknown>).apiKey);
         const packageVersion = safePackageVersion((block as Record<string, unknown>).packageVersion);
+        const clientKey = safeNonEmptyString((block as Record<string, unknown>).clientKey);
+        const tokenBaseUrl = safeTokenBaseUrl((block as Record<string, unknown>).tokenBaseUrl);
 
         const gamification: GamificationIntegrationToggleConfig = { enabled };
         if (apiKey !== undefined) gamification.apiKey = apiKey;
         if (packageVersion !== undefined) gamification.packageVersion = packageVersion;
+        if (clientKey !== undefined) gamification.clientKey = clientKey;
+        if (tokenBaseUrl !== undefined) gamification.tokenBaseUrl = tokenBaseUrl;
         integrations.gamification = gamification;
       } else {
         const appId = safeNonEmptyString((block as Record<string, unknown>).appId);
@@ -195,6 +250,12 @@ export function areControlConfigsEqual(a: ControlConfig, b: ControlConfig): bool
         a.integrations.gamification.packageVersion !== b.integrations.gamification.packageVersion
       )
         return false;
+      if (a.integrations.gamification.clientKey !== b.integrations.gamification.clientKey) {
+        return false;
+      }
+      if (a.integrations.gamification.tokenBaseUrl !== b.integrations.gamification.tokenBaseUrl) {
+        return false;
+      }
     } else {
       if (a.integrations.onesignal.enabled !== b.integrations.onesignal.enabled) return false;
       if (a.integrations.onesignal.appId !== b.integrations.onesignal.appId) return false;

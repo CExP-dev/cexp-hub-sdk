@@ -88,6 +88,8 @@ Consumers keep a stable script URL (or pinned major) after integration; behavior
 
 Safe, validated fields in control JSON (e.g. gamification `packageVersion` / `apiKey` when your platform exposes them) can be updated server-side for a given `sdkId`.
 
+For **gamification**, control JSON may supply **`clientKey`** and **`tokenBaseUrl`**: the hub fetches a short-lived JWT from `GET {tokenBaseUrl}/sv/token` before loading the vendor script and passes that token into the SDK. If those CDP fields are not both set, the hub uses the static **`apiKey`** from control JSON instead (no token HTTP call). Environment-specific **`tokenBaseUrl`** values are set per deployment on the backend.
+
 ### What needs a new hub release
 
 Changes to **hub-pinned** script URLs, init behavior, or public `CExP` API require a new **`cexp-hub-sdk`** version (npm / CDN).

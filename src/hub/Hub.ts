@@ -51,13 +51,14 @@ export class Hub {
   constructor(options: HubOptions = {}) {
     const overrides = options.pluginOverrides ?? {};
     for (const integrationKey of PLUGIN_ORDER) {
-      const plugin = overrides[integrationKey] ?? new NoopPlugin(integrationKey);
+      const plugin =
+        overrides[integrationKey] ?? new NoopPlugin(integrationKey);
 
       // Runtime guard: integration key drives registry lookup and lifecycle routing.
       // If plugin.name doesn't match, later tasks/tests may silently route events incorrectly.
       if (plugin.name !== integrationKey) {
         throw new Error(
-          `[Hub] Plugin name mismatch for integrationKey "${integrationKey}": expected plugin.name === integrationKey (got "${plugin.name}").`,
+          `[Hub] Plugin name mismatch for integrationKey "${integrationKey}": expected plugin.name === integrationKey (got "${plugin.name}").`
         );
       }
 
@@ -114,7 +115,10 @@ export class Hub {
       for (const integrationKey of PLUGIN_ORDER) {
         const plugin = this.plugins.get(integrationKey);
         if (!plugin) continue;
-        await plugin.init(ctx, next.integrations[integrationKey] ?? { enabled: false });
+        await plugin.init(
+          ctx,
+          next.integrations[integrationKey] ?? { enabled: false }
+        );
       }
 
       for (const integrationKey of PLUGIN_ORDER) {
@@ -157,18 +161,34 @@ export class Hub {
 
         // enabled didn't change
         if (nextEnabled) {
-          const apiKeyChanged = prevGamification.apiKey !== nextGamification.apiKey;
-          const packageVersionChanged = prevGamification.packageVersion !== nextGamification.packageVersion;
-          if (apiKeyChanged || packageVersionChanged) {
+          const packageVersionChanged =
+            prevGamification.packageVersion !== nextGamification.packageVersion;
+          const clientKeyChanged =
+            prevGamification.clientKey !== nextGamification.clientKey;
+          const tokenBaseUrlChanged =
+            prevGamification.tokenBaseUrl !== nextGamification.tokenBaseUrl;
+          if (
+            packageVersionChanged ||
+            clientKeyChanged ||
+            tokenBaseUrlChanged
+          ) {
             await plugin.init(ctx, nextGamification ?? { enabled: false });
             plugin.onToggle(false);
             plugin.onToggle(true);
           }
         } else {
           // Optional refresh: keep the config up to date for the next enable transition.
-          const apiKeyChanged = prevGamification.apiKey !== nextGamification.apiKey;
-          const packageVersionChanged = prevGamification.packageVersion !== nextGamification.packageVersion;
-          if (apiKeyChanged || packageVersionChanged) {
+          const packageVersionChanged =
+            prevGamification.packageVersion !== nextGamification.packageVersion;
+          const clientKeyChanged =
+            prevGamification.clientKey !== nextGamification.clientKey;
+          const tokenBaseUrlChanged =
+            prevGamification.tokenBaseUrl !== nextGamification.tokenBaseUrl;
+          if (
+            packageVersionChanged ||
+            clientKeyChanged ||
+            tokenBaseUrlChanged
+          ) {
             await plugin.init(ctx, nextGamification ?? { enabled: false });
           }
         }
@@ -177,7 +197,8 @@ export class Hub {
       }
 
       // Non-gamification integration
-      const prevEnabled = prevControlConfig!.integrations[integrationKey].enabled;
+      const prevEnabled =
+        prevControlConfig!.integrations[integrationKey].enabled;
       const enabled = next.integrations[integrationKey].enabled;
       if (prevEnabled !== enabled) plugin.onToggle(enabled);
     }
@@ -207,7 +228,9 @@ export class Hub {
     return [...PLUGIN_ORDER];
   }
 
-  private deriveTogglesFromControlConfig(cfg: ControlConfig): IntegrationToggles {
+  private deriveTogglesFromControlConfig(
+    cfg: ControlConfig
+  ): IntegrationToggles {
     return {
       onesignal: cfg.integrations.onesignal.enabled,
       gamification: cfg.integrations.gamification.enabled,

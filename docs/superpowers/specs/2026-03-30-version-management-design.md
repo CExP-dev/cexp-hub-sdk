@@ -1,7 +1,7 @@
 # Version management — design (hybrid)
 
 **Status:** Draft for review  
-**Related:** [../architecture/2026-03-20-cexp-hub-sdk-system-architecture.md](../architecture/2026-03-20-cexp-hub-sdk-system-architecture.md) (current hub); [../plans/2026-03-20-cexp-hub-sdk.md](../plans/2026-03-20-cexp-hub-sdk.md) (historical four-plugin plan)
+**Related:** [../architecture/2026-03-20-cexp-hub-sdk-system-architecture.md](../architecture/2026-03-20-cexp-hub-sdk-system-architecture.md) (current hub); [../plans/2026-03-20-cexp-hub-sdk.md](../plans/2026-03-20-cexp-hub-sdk.md) (historical four-plugin plan); [../plans/2026-04-06-gamification-access-token-implementation.md](../plans/2026-04-06-gamification-access-token-implementation.md) (gamification token + refresh)
 
 ---
 
@@ -74,7 +74,7 @@ flowchart TB
 flowchart TB
   L1["Layer 1: Hub package SemVer (package.json / CExP.version)"]
   L2a["Layer 2a: Hub-pinned vendor URLs (e.g. OneSignal SDK)"]
-  L2b["Layer 2b: Remote-config knobs (e.g. gamification packageVersion + apiKey)"]
+  L2b["Layer 2b: Remote-config knobs (e.g. gamification packageVersion, apiKey or clientKey+tokenBaseUrl)"]
   L3["Layer 3: Control API version field (ETag / change detection)"]
 
   L1 --> L2a
@@ -102,8 +102,8 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-  subgraph p1 [Path 1 — Gamification semver]
-    A1[Backend sets packageVersion / apiKey] --> A2[Hub applies after fetch]
+  subgraph p1 [Path 1 — Gamification semver + credentials]
+    A1[Backend sets packageVersion + apiKey OR clientKey + tokenBaseUrl] --> A2[Hub applies after fetch]
   end
 
   subgraph p2 [Path 2 — Hub-pinned URL change]
@@ -148,7 +148,7 @@ These are **fixed in source** (constants), covered by tests, and updated **only*
 
 When the **control API** and **parser** support it, **non-secret** per-integration fields may override **safe** defaults:
 
-- **Gamification:** `packageVersion` (npm semver or dist-tag for `cexp-gamification` on jsDelivr), `apiKey` — already modeled in plugin types; **wiring from `ControlService` → `Hub` → `plugin.init(ctx, config)`** is required for remote rollout without a hub release (defaults remain in hub code).
+- **Gamification:** `packageVersion` (npm semver or dist-tag for `cexp-gamification` on jsDelivr), and **either** a static `apiKey` **or** a **CDP access-token flow** (see [Gamification CDP access token](#gamification-cdp-access-token) below). **Wiring from `ControlService` → `Hub` → `plugin.init(ctx, config)`** is required for remote rollout without a hub release (defaults remain in hub code).
 
 **Rules for remote pins:**
 
@@ -166,6 +166,53 @@ Even in hybrid mode, a **new hub release** is required when:
 
 ---
 
+## Gamification CDP access token
+
+This section extends Layer 2 for integrations that **do not** pass a long-lived `apiKey` string directly. Instead the hub exchanges a **client key** for a **short-lived JWT** and passes that JWT into the vendor SDK as the same `apiKey` parameter the script expects.
+
+### Goals
+
+1. **Fetch access token before** loading the gamification script (`cexp-gamification` on jsDelivr) and before `new window.cexp({ apiKey })`.
+2. Support **multiple environments** without hardcoding host lists in the SDK: the **control JSON** supplies **`tokenBaseUrl`** per deployment (staging vs production, etc.).
+3. **Refresh tokens proactively** using the JWT `exp` claim (**v1 = “A-only”**): schedule refresh shortly before expiry; **reactive retry on 401 / auth failure** is a **later** improvement (“C”), not required in v1.
+
+### Control JSON fields (`integrations.gamification`)
+
+| Field | Required | Purpose |
+| ----- | -------- | ------- |
+| `clientKey` | For token flow | Non-empty string sent as `X-Client-Key` to the CDP token endpoint. |
+| `tokenBaseUrl` | For token flow | HTTPS origin + path prefix for the gamification API in that environment (e.g. `https://staging-cexp.cads.live/gamification`). **No trailing slash.** The hub calls `GET {tokenBaseUrl}/sv/token`. |
+| `apiKey` | Legacy / alternate | If **`clientKey` is absent**, use **`apiKey`** as today (static string passed to the vendor SDK). |
+| `packageVersion` | Optional | Unchanged: semver/dist-tag for jsDelivr. |
+
+**Precedence:** If `clientKey` is present (and token flow is wired), **use the token path** and **ignore remote `apiKey` for initialization** (or treat `apiKey` as unused in that mode — document one rule for integrators). If `clientKey` is absent, **keep backward-compatible behavior** with `apiKey` only.
+
+### Token HTTP contract
+
+- **Request:** `GET {tokenBaseUrl}/sv/token` with header `X-Client-Key: <clientKey>`, `Accept` as needed for the API (typically `application/json` or negotiate with backend).
+- **Response:** Body yields a **JWT string** (either **raw body** or a JSON field such as `token` / `access_token` — implementation normalizes to a single string before parsing `exp`).
+- **Expiry:** Decode JWT payload (standard base64url); read `exp` (seconds since Unix epoch). Do **not** trust client clock for security boundaries; **do** use `exp` for scheduling refresh with a **skew** (e.g. 60s) before expiry.
+
+### v1 refresh behavior (“A-only”)
+
+- After obtaining a JWT, schedule **one timer** to run at `exp * 1000 - skewMs`.
+- When the timer fires, if gamification is still enabled: **fetch a new JWT**, then **tear down** the vendor client (`destroy` if available) and **recreate** `new cexp({ apiKey: newJwt })` + `init()` unless a lighter API exists (prefer destroy+recreate for v1 clarity).
+- On **disable/destroy**: clear timers, then existing teardown (remove script tag, clear globals).
+
+**Future (“C”):** add reactive refetch + single retry when the vendor surfaces auth errors, in addition to proactive refresh.
+
+### Environment management
+
+- **Primary:** Backend includes **`tokenBaseUrl`** in control JSON per `sdkId`/environment so the **same hub build** works everywhere; URLs can change without an npm release.
+- **Optional later:** `init({ id, … })` override for `tokenBaseUrl` for local dev and tests (product decision; not required for v1 if mocks cover `fetch`).
+
+### Security and validation
+
+- Validate **`tokenBaseUrl`**: `https` only, reasonable length, and (recommended) an **allowlist** of host/path patterns agreed with platform security — same spirit as other remote URL knobs.
+- **Secrets:** `clientKey` is sensitive; treat like other integration secrets in logs (no console dumps).
+
+---
+
 ## Layer 3: Control API `version` field
 
 The existing `**version` number** on control JSON is for **config identity / change detection** (with ETag), not npm SemVer. Keep it **monotonic** per platform convention. Hub **must** remain tolerant of unknown fields and treat missing integration blocks as safe defaults.
@@ -174,9 +221,10 @@ The existing `**version` number** on control JSON is for **config identity / cha
 
 ## Operational playbook (summary)
 
-1. **Routine gamification bump (semver only):** If remote `packageVersion` + `apiKey` are wired and validated → update **backend config** for `sdkId` → no hub release (optional).
-2. **OneSignal SDK URL change or gamification default script path change:** **Hub release** + tests + deploy CDN/npm.
-3. **New public `CExP` API:** **Hub SemVer** bump per semver rules + changelog.
+1. **Routine gamification bump (semver only):** If remote `packageVersion` + credentials are wired and validated → update **backend config** for `sdkId` → no hub release (optional). Credentials are either **`apiKey`** (legacy) or **`clientKey` + `tokenBaseUrl`** (CDP JWT flow).
+2. **Environment / CDP base URL change:** Prefer updating **`tokenBaseUrl`** (and related fields) in **control JSON** per environment; hub release only if validation rules or token path logic changes.
+3. **OneSignal SDK URL change or gamification default script path change:** **Hub release** + tests + deploy CDN/npm.
+4. **New public `CExP` API:** **Hub SemVer** bump per semver rules + changelog.
 
 ---
 
@@ -184,20 +232,24 @@ The existing `**version` number** on control JSON is for **config identity / cha
 
 - **Hub release:** Unit/integration tests for each plugin’s load URL, init, teardown, and router behavior after pin changes.
 - **Remote config:** Tests for parse/merge: defaults, valid remote override, invalid remote ignored, allowlist rejection.
+- **Gamification token flow:** Unit tests for JWT `exp` parsing, refresh scheduling, and mocked `fetch` for `GET …/sv/token`; integration tests for plugin enable/disable with token path vs legacy `apiKey`.
 
 ---
 
 ## Open decisions (implementation phase)
 
 1. **Build-time `CExP.version`:** Use `define` from bundler, `import package.json`, or codegen — single source of truth.
-2. **Extend `parseControlConfig` / `ControlConfig`** to carry optional per-integration blobs (e.g. `gamification: { enabled, packageVersion?, apiKey? }`) without breaking strict parse paths — follow “unknown fields ignored” at top level; integration blocks may grow additively.
-3. **Snippet strategy for consumers:** Document “pin `@x.y.z`” vs “org alias URL” as a **product** choice (both compatible with evergreen philosophy if the URL is stable).
+2. **Extend `parseControlConfig` / `ControlConfig`** to carry optional per-integration blobs (e.g. `gamification: { enabled, packageVersion?, apiKey?, clientKey?, tokenBaseUrl? }`) without breaking strict parse paths — follow “unknown fields ignored” at top level; integration blocks may grow additively.
+3. **Exact token response shape:** Confirm with backend whether the body is raw JWT vs JSON wrapper; implement a small normalizer.
+4. **`tokenBaseUrl` allowlist:** Exact host/path patterns for staging vs production (must match platform security review).
+5. **Snippet strategy for consumers:** Document “pin `@x.y.z`” vs “org alias URL” as a **product** choice (both compatible with evergreen philosophy if the URL is stable).
+6. **Init-time override** for `tokenBaseUrl` (optional): defer to a follow-up if remote-only config suffices for v1.
 
 ---
 
 ## Approval
 
 - Product / platform owner agrees with **hub-pinned vs remote** split.
-- Backend team agrees on **control JSON** shape for optional gamification fields.
-- Ready for implementation plan (`writing-plans`).
+- Backend team agrees on **control JSON** shape for optional gamification fields (including **`clientKey`** + **`tokenBaseUrl`** for the CDP token flow).
+- Ready for implementation plan: [../plans/2026-04-06-gamification-access-token-implementation.md](../plans/2026-04-06-gamification-access-token-implementation.md).
 

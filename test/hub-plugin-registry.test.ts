@@ -50,6 +50,54 @@ describe("Hub plugin registry + lifecycle", () => {
     expect(onToggle.mock.calls.map((c) => c[0])).toEqual([true, false, true]);
   });
 
+  it("re-inits gamification when clientKey or tokenBaseUrl changes while enabled", async () => {
+    const init = vi.fn();
+    const onToggle = vi.fn();
+
+    const gamificationPlugin: Plugin = {
+      name: "gamification",
+      init: (_ctx, config) => {
+        init(config);
+      },
+      onToggle,
+    };
+
+    const hub = new Hub({
+      pluginOverrides: { gamification: gamificationPlugin },
+    });
+
+    const base = {
+      version: 1,
+      integrations: {
+        onesignal: { enabled: false },
+        gamification: {
+          enabled: true,
+          packageVersion: "1.0.1-beta.9",
+          clientKey: "ck1",
+          tokenBaseUrl: "https://staging-cexp.cads.live/gamification",
+        },
+      },
+    };
+
+    const tokenUrlChanged: ControlConfig = {
+      ...base,
+      version: 2,
+      integrations: {
+        ...base.integrations,
+        gamification: {
+          ...base.integrations.gamification,
+          tokenBaseUrl: "https://prod-cexp.cads.live/gamification",
+        },
+      },
+    };
+
+    await hub.setControlConfig(base);
+    await hub.setControlConfig(tokenUrlChanged);
+
+    expect(init.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(onToggle.mock.calls.map((c) => c[0])).toEqual([true, false, true]);
+  });
+
   it("keeps ctx.getToggles live after subsequent hub.setControlConfig updates", async () => {
     let getTogglesFn: (() => IntegrationToggles) | undefined;
     const onesignalOnToggle = vi.fn();
