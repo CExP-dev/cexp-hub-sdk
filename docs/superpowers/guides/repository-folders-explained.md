@@ -2,15 +2,13 @@
 
 This document explains the **purpose** of key folders in this repository, their **roles**, and **how they connect** at runtime.
 
-**Current hub (2026-04):** two integrations — **OneSignal** and **gamification** — behind `CExP`; no Snowplow, identity (`cdp.js`), `IdentityStore`, or automatic SPA history listener.
+**Current hub (2026-04):** two integrations — **notification** (OneSignal) and **gamification** — behind `CExP`; no Snowplow, identity (`cdp.js`), `IdentityStore`, or automatic SPA history listener.
 
 ## High-level architecture (how folders link together)
 
 **Consumer app** calls the public API:
 
 - `CExP.init({ id })`
-- `CExP.track(...)`
-- `CExP.page(...)`
 - `CExP.identify(...)`
 - `CExP.reset()`
 
@@ -21,8 +19,8 @@ Those calls flow through the SDK like this:
    - `ControlService` fetches and polls remote config
    - `Hub` manages plugin lifecycle and toggles
    - `EventRouter` routes events to enabled plugins
-3. `src/config/schema.ts` validates/parses remote control JSON into a safe internal `ControlConfig` (`onesignal` + `gamification` only).
-4. `src/plugins/*` provide the vendor behaviors (**OneSignal**, **gamification**).
+3. `src/config/schema.ts` validates/parses remote control JSON into a safe internal `ControlConfig` (`notification` + `gamification` only).
+4. `src/plugins/*` provide the vendor behaviors (**OneSignal** as notification, **gamification**).
 
 ### Relationship diagram
 
@@ -44,11 +42,11 @@ flowchart LR
 
   subgraph Orchestration["Orchestration"]
     F["`src/hub/Hub.ts`\nplugin registry + toggles"]
-    G["`src/hub/EventRouter.ts`\nroute track/page/identify/reset"]
+    G["`src/hub/EventRouter.ts`\nroute identify/reset"]
   end
 
   subgraph Integrations["Integrations (`src/plugins/*`)"]
-    P2["OneSignal"]
+    P2["OneSignal (notification)"]
     P4["Gamification"]
   end
 
@@ -67,30 +65,30 @@ flowchart LR
 
 - **Role**: All runtime TypeScript for the SDK.
 - **Links**:
-  - `src/index.ts`: public ESM exports (`CExP`, `init`, `track`, …).
+  - `src/index.ts`: public ESM exports (`CExP`, `init`, `identify`, …).
   - `src/global.ts`: creates the singleton facade and connects hub/router/control/config.
   - `src/types.ts`: public types (`CExPApi`, `InitOptions`, `IntegrationToggles`).
 
-## `src/hub/` — orchestration layer (“the brain”)
+## `src/hub/` — orchestration layer ("the brain")
 
 - **Role**: Owns SDK lifecycle, remote-control config application, and event routing rules.
 - **Key files**:
   - `ControlService.ts`
     - Fetches remote control config (ETag-aware), keeps last-good config, polls periodically, invokes `onUpdate`.
   - `Hub.ts`
-    - Maintains deterministic plugin registry order (`onesignal`, then `gamification`).
+    - Maintains deterministic plugin registry order (`notification`, then `gamification`).
     - Calls `plugin.init(ctx, config)` then `plugin.onToggle(enabled)` based on remote config.
   - `EventRouter.ts`
-    - Delegates `track`/`page`/`identify`/`reset` to plugin hooks when the corresponding toggle is enabled.
+    - Delegates `identify`/`reset` to plugin hooks when the corresponding toggle is enabled.
 
 ## `src/plugins/` — integrations (vendor adapters)
 
 - **Role**: Each plugin implements the shared `Plugin` interface (init, enable/disable, event hooks).
 - **Links**:
   - `Hub` owns plugin lifecycle (`init`, `onToggle`).
-  - `EventRouter` calls optional hooks (`track`, `page`, `identify`, `reset`) depending on toggles.
+  - `EventRouter` calls optional hooks (`identify`, `reset`) depending on toggles.
 - **Examples**:
-  - `src/plugins/onesignal/` — OneSignal web SDK.
+  - `src/plugins/onesignal/` — OneSignal web SDK (registered as `notification`).
   - `src/plugins/gamification/` — `cexp-gamification` / `window.cexp`.
 
 ## `src/config/` — remote control schema & parsing

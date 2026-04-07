@@ -3,13 +3,13 @@ import type { ControlConfig, IntegrationKey } from "../config/schema";
 import type { HubContext, Plugin } from "../plugins/types";
 
 const DEFAULT_TOGGLES: IntegrationToggles = {
-  onesignal: false,
+  notification: false,
   gamification: false,
 };
 
 // Fixed integration/plugin registry order.
 // Keep this stable because later tasks may depend on deterministic init/teardown sequencing.
-const PLUGIN_ORDER: IntegrationKey[] = ["onesignal", "gamification"];
+const PLUGIN_ORDER: IntegrationKey[] = ["notification", "gamification"];
 
 class NoopPlugin implements Plugin {
   public readonly name: string;
@@ -80,7 +80,7 @@ export class Hub {
     this.currentControlConfig = {
       version: this.currentControlConfig?.version ?? 0,
       integrations: {
-        onesignal: { enabled: next.onesignal },
+        notification: { enabled: next.notification },
         gamification: { enabled: next.gamification },
       },
     };
@@ -204,10 +204,6 @@ export class Hub {
     }
   }
 
-  getPlugin(name: string): Plugin | undefined {
-    return this.plugins.get(name);
-  }
-
   getPlugins(): Map<string, Plugin> {
     return this.plugins;
   }
@@ -220,19 +216,11 @@ export class Hub {
     };
   }
 
-  /**
-   * Deterministic list of registry keys in the order Hub registers plugins.
-   * Useful for testing/reporting.
-   */
-  getPluginOrder(): string[] {
-    return [...PLUGIN_ORDER];
-  }
-
   private deriveTogglesFromControlConfig(
     cfg: ControlConfig
   ): IntegrationToggles {
     return {
-      onesignal: cfg.integrations.onesignal.enabled,
+      notification: cfg.integrations.notification.enabled,
       gamification: cfg.integrations.gamification.enabled,
     };
   }

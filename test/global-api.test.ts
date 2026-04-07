@@ -17,33 +17,6 @@ describe("CExP public surface", () => {
     delete (globalThis as unknown as { cexp?: unknown }).cexp;
   });
 
-  it("init syncs control config and allows track after first config resolves", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        new Response(
-          JSON.stringify({
-            version: 1,
-            integrations: {
-              onesignal: { enabled: false },
-              gamification: { enabled: false },
-            },
-          }),
-          { status: 200, headers: { "content-type": "application/json", etag: "v1" } },
-        ),
-      ),
-    );
-
-    const CExP = createCExP();
-    CExP.init({ id: "sdk-1" });
-
-    await vi.waitFor(() => {
-      expect(vi.mocked(fetch)).toHaveBeenCalled();
-    });
-
-    expect(() => CExP.track("purchase", { amount: 10 })).not.toThrow();
-  });
-
   it("identify after first config resolves does not throw", async () => {
     vi.stubGlobal(
       "fetch",
@@ -52,7 +25,7 @@ describe("CExP public surface", () => {
           JSON.stringify({
             version: 1,
             integrations: {
-              onesignal: { enabled: false },
+              notification: { enabled: false },
               gamification: { enabled: false },
             },
           }),

@@ -4,12 +4,12 @@ import { ControlService } from "../src/hub/ControlService";
 import type { ControlConfig } from "../src/config/schema";
 
 const makeControlBody = (toggles: {
-  onesignal?: boolean;
+  notification?: boolean;
   gamification?: boolean;
   version?: number;
 }) => {
   const integrations: Record<string, { enabled: boolean }> = {};
-  if (typeof toggles.onesignal === "boolean") integrations.onesignal = { enabled: toggles.onesignal };
+  if (typeof toggles.notification === "boolean") integrations.notification = { enabled: toggles.notification };
   if (typeof toggles.gamification === "boolean")
     integrations.gamification = { enabled: toggles.gamification };
 
@@ -61,11 +61,11 @@ describe("ControlService", () => {
   });
 
   it("keeps previous state on 304 (no body) and updates stored ETag", async () => {
-    const firstBody = makeControlBody({ version: 10, onesignal: true });
+    const firstBody = makeControlBody({ version: 10, notification: true });
     const parsedFirst: ControlConfig = {
       version: 10,
       integrations: {
-        onesignal: { enabled: true },
+        notification: { enabled: true },
         gamification: { enabled: false },
       },
     };
@@ -133,8 +133,8 @@ describe("ControlService", () => {
   });
 
   it("updates toggles on 200 with new body and emits callback", async () => {
-    const body1 = makeControlBody({ version: 1, onesignal: true, gamification: false });
-    const body2 = makeControlBody({ version: 2, onesignal: false, gamification: true });
+    const body1 = makeControlBody({ version: 1, notification: true, gamification: false });
+    const body2 = makeControlBody({ version: 2, notification: false, gamification: true });
 
     fetchMock.mockResolvedValueOnce(mockFetchResponse({ status: 200, etag: '"v1"', body: body1 }) as any);
     fetchMock.mockResolvedValueOnce(mockFetchResponse({ status: 200, etag: '"v2"', body: body2 }) as any);
@@ -144,14 +144,14 @@ describe("ControlService", () => {
     await svc.syncOnce();
     expect(updateSpy).toHaveBeenCalledTimes(1);
     expect(svc.getToggles()).toEqual({
-      onesignal: true,
+      notification: true,
       gamification: false,
     });
 
     await svc.syncOnce();
     expect(updateSpy).toHaveBeenCalledTimes(2);
     expect(svc.getToggles()).toEqual({
-      onesignal: false,
+      notification: false,
       gamification: true,
     });
   });
@@ -161,7 +161,7 @@ describe("ControlService", () => {
       version: 1,
       integrations: {
         gamification: { enabled: true, packageVersion: "1.0.1-beta.9", apiKey: "k1" },
-        onesignal: { enabled: false },
+        notification: { enabled: false },
       },
     };
 
@@ -169,7 +169,7 @@ describe("ControlService", () => {
       version: 1,
       integrations: {
         gamification: { enabled: true, packageVersion: "1.0.1-beta.10", apiKey: "k1" },
-        onesignal: { enabled: false },
+        notification: { enabled: false },
       },
     };
 
@@ -189,11 +189,11 @@ describe("ControlService", () => {
   });
 
   it("keeps previous state on non-200 response and does not call onUpdate", async () => {
-    const firstBody = makeControlBody({ version: 10, onesignal: true });
+    const firstBody = makeControlBody({ version: 10, notification: true });
     const parsedFirst: ControlConfig = {
       version: 10,
       integrations: {
-        onesignal: { enabled: true },
+        notification: { enabled: true },
         gamification: { enabled: false },
       },
     };
@@ -228,11 +228,11 @@ describe("ControlService", () => {
   });
 
   it("keeps previous state when res.json throws on 200 and does not call onUpdate", async () => {
-    const firstBody = makeControlBody({ version: 10, onesignal: true });
+    const firstBody = makeControlBody({ version: 10, notification: true });
     const parsedFirst: ControlConfig = {
       version: 10,
       integrations: {
-        onesignal: { enabled: true },
+        notification: { enabled: true },
         gamification: { enabled: false },
       },
     };
@@ -260,11 +260,11 @@ describe("ControlService", () => {
   });
 
   it("keeps previous state when res.json returns invalid JSON on 200 and does not call onUpdate", async () => {
-    const firstBody = makeControlBody({ version: 10, onesignal: true });
+    const firstBody = makeControlBody({ version: 10, notification: true });
     const parsedFirst: ControlConfig = {
       version: 10,
       integrations: {
-        onesignal: { enabled: true },
+        notification: { enabled: true },
         gamification: { enabled: false },
       },
     };
@@ -313,11 +313,11 @@ describe("ControlService", () => {
   });
 
   it("keeps previous state on 200 with missing integrations and does not call onUpdate", async () => {
-    const firstBody = makeControlBody({ version: 10, onesignal: true });
+    const firstBody = makeControlBody({ version: 10, notification: true });
     const parsedFirst: ControlConfig = {
       version: 10,
       integrations: {
-        onesignal: { enabled: true },
+        notification: { enabled: true },
         gamification: { enabled: false },
       },
     };
@@ -366,11 +366,11 @@ describe("ControlService", () => {
   });
 
   it("keeps previous state on 200 with non-boolean enabled integration and does not call onUpdate", async () => {
-    const firstBody = makeControlBody({ version: 10, onesignal: true });
+    const firstBody = makeControlBody({ version: 10, notification: true });
     const parsedFirst: ControlConfig = {
       version: 10,
       integrations: {
-        onesignal: { enabled: true },
+        notification: { enabled: true },
         gamification: { enabled: false },
       },
     };
@@ -382,13 +382,13 @@ describe("ControlService", () => {
       body: {
         version: 11,
         integrations: {
-          onesignal: { enabled: "not-a-boolean" },
+          notification: { enabled: "not-a-boolean" },
         },
       },
       jsonImpl: async () => ({
         version: 11,
         integrations: {
-          onesignal: { enabled: "not-a-boolean" },
+          notification: { enabled: "not-a-boolean" },
         },
       }),
     });

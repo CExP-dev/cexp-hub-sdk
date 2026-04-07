@@ -121,7 +121,7 @@ function ensureOneSignalScriptLoaded(): Promise<void> {
  * and tears down script + globals on toggle-off.
  */
 export class OneSignalPlugin implements Plugin {
-  public readonly name = "onesignal";
+  public readonly name = "notification";
 
   private ctx!: HubContext;
   private cfg!: ReturnType<typeof parseOneSignalConfig>;
@@ -146,8 +146,7 @@ export class OneSignalPlugin implements Plugin {
     }
   }
 
-  identify(userId: string, _traits?: Record<string, unknown>): void {
-    void _traits;
+  identify(userId: string): void {
     if (!this.active) return;
 
     this.pendingUserId = userId;

@@ -35,7 +35,6 @@ type ParsedGamificationConfig = {
 type CexpInstance = {
   init?: () => void | Promise<void>;
   destroy?: () => void;
-  track?: (event: string, props: Record<string, unknown>) => void;
   identify?: (userId: string, traits?: Record<string, unknown>) => void;
 };
 
@@ -189,20 +188,6 @@ export class GamificationPlugin implements Plugin {
     }
   }
 
-  track(event: string, props: Record<string, unknown>): void {
-    if (!this.active || !this.client?.track) return;
-    try {
-      this.client.track(event, props);
-    } catch {
-      // ignore vendor errors
-    }
-  }
-
-  page(_props: Record<string, unknown>): void {
-    void _props;
-    // No documented page hook in this plugin yet; route-level analytics are not wired here.
-  }
-
   identify(userId: string, traits?: Record<string, unknown>): void {
     if (!this.active || !this.client?.identify) return;
     try {
@@ -210,10 +195,6 @@ export class GamificationPlugin implements Plugin {
     } catch {
       // ignore
     }
-  }
-
-  reset(): void {
-    // Vendor-specific reset not confirmed; hub reset is handled elsewhere in Task 12.
   }
 
   destroy(): void {

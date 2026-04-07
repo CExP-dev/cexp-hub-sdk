@@ -44,7 +44,7 @@ When config is available and the request does not match the current `ETag`, resp
   {
     "version": <number>,
     "integrations": {
-      "onesignal": { "enabled": <boolean>, "appId"?: <string> },
+      "notification": { "enabled": <boolean>, "appId"?: <string> },
       "gamification": {
         "enabled": <boolean>,
         "packageVersion"?: <string>,
@@ -82,7 +82,7 @@ Example (CDP fields):
 {
   "version": 1,
   "integrations": {
-    "onesignal": { "enabled": false },
+    "notification": { "enabled": false },
     "gamification": {
       "enabled": true,
       "packageVersion": "1.0.1-beta.10",
@@ -117,7 +117,7 @@ For `gamification` remote knobs, remember that `tryParseControlConfig()` sanitiz
 
 In practice, the file should always include:
 - `version` as a finite number
-- `integrations` as an object with the **two** known integration blocks (`onesignal`, `gamification`; if missing, the server may fill defaults with `enabled: false`)
+- `integrations` as an object with the **two** known integration blocks (`notification`, `gamification`; if missing, the server may fill defaults with `enabled: false`)
 - `enabled` as boolean
 - for `gamification`:
   - `packageVersion` is optional (if invalid/unallowlisted/too long, omit)

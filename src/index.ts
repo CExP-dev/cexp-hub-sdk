@@ -6,8 +6,6 @@ export type { CExPApi, InitOptions } from "./types";
 export const CExP = createCExP();
 
 export const init = CExP.init;
-export const track = CExP.track;
-export const page = CExP.page;
 export const identify = CExP.identify;
 export const reset = CExP.reset;
 export const version = CExP.version;

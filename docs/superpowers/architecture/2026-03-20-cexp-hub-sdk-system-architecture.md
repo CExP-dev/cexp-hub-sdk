@@ -1,6 +1,6 @@
 # CExP Hub SDK — system architecture
 
-> **Current as of 2026-04:** Runtime behavior is a **two-integration** hub (**OneSignal**, **gamification**) behind `window.CExP`. **Identity (cdp.js), Snowplow, `IdentityStore`, and automatic SPA history listeners were removed** — see [../plans/2026-04-03-remove-identity-snowplow-plugins.md](../plans/2026-04-03-remove-identity-snowplow-plugins.md).
+> **Current as of 2026-04:** Runtime behavior is a **two-integration** hub (**notification** via OneSignal, **gamification**) behind `window.CExP`. The public API surface is `init`, `identify`, `reset`, and `version`. **Identity (cdp.js), Snowplow, `IdentityStore`, automatic SPA history listeners, `track`, and `page`** were removed — see [../plans/2026-04-03-remove-identity-snowplow-plugins.md](../plans/2026-04-03-remove-identity-snowplow-plugins.md) and [../plans/2026-04-07-plugin-cleanup-and-notification-rename.md](../plans/2026-04-07-plugin-cleanup-and-notification-rename.md).
 
 The older four-plugin design (identity + Snowplow + OneSignal + gamification) is documented historically in [../plans/2026-03-20-cexp-hub-sdk.md](../plans/2026-03-20-cexp-hub-sdk.md); treat that plan as **superseded** for current product behavior.
 
@@ -12,9 +12,9 @@ Diagrams use [Mermaid](https://mermaid.js.org/); render in GitHub, VS Code (prev
 
 **Integrate once, never touch script again.** Consumers embed a single stable CDN script snippet one time. After that, toggles and integration behavior are driven by your backend (control/toggle polling), and the SDK injects/removes vendor scripts lazily per integration.
 
-**Two integrations have toggles.** **Notifications (OneSignal)** and **gamification** are independently togglable from the backend config. When toggled on, the vendor script is lazy-loaded and initialized. When toggled off, the plugin is destroyed and its `<script>` tag is **removed from the DOM**.
+**Two integrations have toggles.** **Notification** (OneSignal) and **gamification** are independently togglable from the backend config. When toggled on, the vendor script is lazy-loaded and initialized. When toggled off, the plugin is destroyed and its `<script>` tag is **removed from the DOM**.
 
-There is **no** automatic single-page-app page listener: consumers who need route-level signals call `**CExP.page()`** explicitly (for example from a router `afterEach` hook). `CExP.track` is forwarded to **gamification** when that integration is enabled.
+There is **no** `track` or `page` on the public API. Consumers call `CExP.identify()` to associate the session with a known user and `CExP.reset()` to clear state.
 
 ---
 
@@ -63,10 +63,10 @@ flowchart TD
 ## 1. Key integration details
 
 
-| Integration   | Script source                                                   | Global                    | Hub role                                                   | Versioning policy                                                |
-| ------------- | --------------------------------------------------------------- | ------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------- |
-| Notifications | `cdn.onesignal.com/.../OneSignalSDK.page.js`                    | `OneSignalDeferred` queue | Web push; `identify` maps to vendor login where supported. | **Hub-pinned** (URL/init via hub release)                        |
-| Gamification  | `cdn.jsdelivr.net/npm/cexp-gamification@…/dist/cexp-web-sdk.js` | `window.cexp`             | `track` / `page` / `identify` hooks when enabled.          | **Hybrid** (hub defaults; optional allowlisted remote overrides) |
+| Integration    | Script source                                                   | Global                    | Hub role                                                       | Versioning policy                                                |
+| -------------- | --------------------------------------------------------------- | ------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Notification   | `cdn.onesignal.com/.../OneSignalSDK.page.js`                    | `OneSignalDeferred` queue | Web push; `identify` maps to vendor login where supported.     | **Hub-pinned** (URL/init via hub release)                        |
+| Gamification   | `cdn.jsdelivr.net/npm/cexp-gamification@…/dist/cexp-web-sdk.js` | `window.cexp`             | `identify` hook when enabled; CDP JWT token refresh on enable. | **Hybrid** (hub defaults; optional allowlisted remote overrides) |
 
 
 ---
@@ -126,7 +126,7 @@ flowchart TB
   end
 
   subgraph plugins [Internal plugins — not exposed to consumers]
-    POne[OneSignalPlugin]
+    POne["OneSignalPlugin (notification)"]
     PGam[GamificationPlugin]
   end
 
@@ -156,9 +156,7 @@ flowchart LR
   end
 
   subgraph runtimePhase [Runtime events]
-    T["CExP.track()"] --> G[EventRouter]
-    P["CExP.page()"] --> G
-    I["CExP.identify()"] --> G
+    I["CExP.identify()"] --> G[EventRouter]
     G -->|"per toggle rules"| H[Enabled plugins]
   end
 ```
@@ -204,7 +202,7 @@ sequenceDiagram
 
 ### Control API `version` (config identity)
 
-The control JSON `version` value is treated as **config identity / change detection** (usually paired with ETag). It is **not** the hub package SemVer; hub SemVer remains `cexp-hub-sdk`’s published version.
+The control JSON `version` value is treated as **config identity / change detection** (usually paired with ETag). It is **not** the hub package SemVer; hub SemVer remains `cexp-hub-sdk`'s published version.
 
 ---
 
@@ -234,28 +232,26 @@ flowchart LR
 ## 7. Event routing rules (current)
 
 
-| Integration      | Toggle on                                                | Toggle off                                       |
-| ---------------- | -------------------------------------------------------- | ------------------------------------------------ |
-| **OneSignal**    | `identify` → associate user; push flow per vendor SDK    | Clear user/subscription; script removed from DOM |
-| **Gamification** | `track` / `page` / `identify` forwarded when hooks exist | Calls ignored; script removed from DOM           |
+| Integration      | Toggle on                                                    | Toggle off                                       |
+| ---------------- | ------------------------------------------------------------ | ------------------------------------------------ |
+| **Notification** | `identify` → associate user; push flow per vendor SDK        | Clear user/subscription; script removed from DOM |
+| **Gamification** | `identify` forwarded when hook exists; CDP JWT token refresh | Calls ignored; script removed from DOM           |
 
 
 ```mermaid
 flowchart TB
-  E["Incoming: track / page / identify"] --> PQ{"Config\nresolved?"}
+  E["Incoming: identify"] --> PQ{"Config\nresolved?"}
   PQ -->|no| Q["Pre-init queue"]
   PQ -->|yes| R[EventRouter]
 
-  R -->|"onesignal on"| O[OneSignalPlugin]
+  R -->|"notification on"| O["OneSignalPlugin (notification)"]
   R -->|"gamification on"| G[GamificationPlugin]
 ```
 
 
 
-- `**track`:** gamification only (when enabled).
-- `**page`:** gamification only (when enabled); the gamification plugin may implement `page` or leave it empty.
-- `**identify`:** OneSignal and gamification (each when enabled).
-- `**reset`:** OneSignal and gamification (each when enabled).
+- **`identify`:** Notification and gamification (each when enabled).
+- **`reset`:** Notification only (when enabled).
 
 ---
 
@@ -263,5 +259,5 @@ flowchart TB
 
 - Historical implementation plan (four plugins): [../plans/2026-03-20-cexp-hub-sdk.md](../plans/2026-03-20-cexp-hub-sdk.md)
 - Removal of identity + Snowplow + SPA stack: [../plans/2026-04-03-remove-identity-snowplow-plugins.md](../plans/2026-04-03-remove-identity-snowplow-plugins.md)
+- Plugin cleanup + notification rename: [../plans/2026-04-07-plugin-cleanup-and-notification-rename.md](../plans/2026-04-07-plugin-cleanup-and-notification-rename.md)
 - Version-management policy (hybrid): [../specs/2026-03-30-version-management-design.md](../specs/2026-03-30-version-management-design.md)
-

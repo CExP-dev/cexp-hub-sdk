@@ -2,8 +2,24 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 
 import { createCExP } from "../src/global";
 
-const GAMIFICATION_VERSION_OVERRIDE = "1.0.1-beta.10";
-const EXPECTED_GAMIFICATION_SCRIPT_SUBSTRING = `cexp-gamification@${GAMIFICATION_VERSION_OVERRIDE}`;
+/** Substring of the jsDelivr URL from `GamificationPlugin` default package version (`@1.0.1-beta.18`). */
+const EXPECTED_GAMIFICATION_SCRIPT_SUBSTRING = "cexp-gamification@1.0.1-beta.18";
+
+const tokenBase = "https://staging-cexp.cads.live/gamification";
+
+function jwtWithExp(expSec: number): string {
+  const b64url = (s: string) =>
+    btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return `${b64url(JSON.stringify({ alg: "none", typ: "JWT" }))}.${b64url(
+    JSON.stringify({ exp: expSec }),
+  )}.sig`;
+}
+
+function requestUrl(input: RequestInfo | URL): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.href;
+  return input.url;
+}
 
 describe("ControlConfig integration wiring", () => {
   afterEach(() => {
@@ -16,19 +32,26 @@ describe("ControlConfig integration wiring", () => {
     delete (globalThis as unknown as { cexp?: unknown }).cexp;
   });
 
-  it("injects jsDelivr gamification script using remote packageVersion and apiKey", async () => {
+  it("injects jsDelivr gamification script using CDP token flow (remote packageVersion)", async () => {
+    const expSec = Math.floor(Date.now() / 1000) + 7200;
+    const jwt = jwtWithExp(expSec);
+
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => {
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = requestUrl(input);
+        if (url.includes("/sv/token")) {
+          return new Response(jwt, { status: 200 });
+        }
         return new Response(
           JSON.stringify({
             version: 1,
             integrations: {
-              onesignal: { enabled: false },
+              notification: { enabled: false },
               gamification: {
                 enabled: true,
-                packageVersion: GAMIFICATION_VERSION_OVERRIDE,
-                apiKey: "k_123",
+                clientKey: "ck-wiring-test",
+                tokenBaseUrl: tokenBase,
               },
             },
           }),
@@ -54,4 +77,3 @@ describe("ControlConfig integration wiring", () => {
     );
   });
 });
-

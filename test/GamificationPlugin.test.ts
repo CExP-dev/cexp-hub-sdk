@@ -1,17 +1,18 @@
-import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import {
   GamificationPlugin,
 } from "../src/plugins/gamification/GamificationPlugin";
 
-const DEFAULT_VER = "1.0.1-beta.9";
+/** Must match `buildGamificationScriptUrl` in GamificationPlugin (version often includes leading `@`). */
+const DEFAULT_VER = "@1.0.1-beta.18";
 const scriptUrlForVersion = (v: string) =>
-  `https://cdn.jsdelivr.net/npm/cexp-gamification@${v}/dist/cexp-web-sdk.js`;
+  `https://cdn.jsdelivr.net/npm/cexp-gamification${v}/dist/cexp-web-sdk.js`;
 
 function hubCtx() {
   return {
     getToggles: () => ({
-      onesignal: false,
+      notification: false,
       gamification: true,
     }),
     getUserId: () => null,
@@ -20,8 +21,7 @@ function hubCtx() {
 
 const origHeadAppendChild = HTMLHeadElement.prototype.appendChild;
 
-/** Real append + synthetic load; call `beforeOnload` to assign `window.cexp` before the plugin's handler runs. */
-function mockHeadAppendGamificationScript(beforeOnload: () => void): MockInstance<(node: Node) => HTMLScriptElement> {
+function mockHeadAppendGamificationScript(beforeOnload: () => void) {
   return vi.spyOn(document.head, "appendChild").mockImplementation(function (this: HTMLHeadElement, node: Node) {
     const el = node as HTMLScriptElement;
     if (el?.tagName === "SCRIPT" && el.src.includes("cexp-gamification") && el.onload) {
@@ -32,6 +32,16 @@ function mockHeadAppendGamificationScript(beforeOnload: () => void): MockInstanc
     }
     return origHeadAppendChild.call(this, node) as HTMLScriptElement;
   });
+}
+
+const tokenBase = "https://staging-cexp.cads.live/gamification";
+
+function jwtWithExp(expSec: number): string {
+  const b64url = (s: string) =>
+    btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return `${b64url(JSON.stringify({ alg: "none", typ: "JWT" }))}.${b64url(
+    JSON.stringify({ exp: expSec })
+  )}.sig`;
 }
 
 describe("GamificationPlugin", () => {
@@ -45,65 +55,27 @@ describe("GamificationPlugin", () => {
     vi.restoreAllMocks();
   });
 
-  it("injects cexp-web-sdk from jsDelivr using packageVersion and constructs window.cexp", async () => {
-    const init = vi.fn();
-    class MockCexp {
-      public init = init;
-      constructor(_opts: { apiKey: string }) {
-        void _opts;
-      }
-    }
-
-    const appendSpy = mockHeadAppendGamificationScript(() => {
-      (window as unknown as { cexp: typeof MockCexp }).cexp = MockCexp as unknown as typeof MockCexp;
-    });
+  it("does not inject script when clientKey and tokenBaseUrl are missing", async () => {
+    const appendSpy = vi.spyOn(document.head, "appendChild");
 
     const plugin = new GamificationPlugin();
-    plugin.init(hubCtx(), { apiKey: "key-1", packageVersion: "1.0.1-beta.9" });
+    plugin.init(hubCtx(), { packageVersion: DEFAULT_VER });
     plugin.onToggle(true);
 
-    await vi.waitFor(() => {
-      expect(appendSpy).toHaveBeenCalled();
-    });
+    await Promise.resolve();
 
-    const expectedUrl = scriptUrlForVersion("1.0.1-beta.9");
-    const script = document.querySelector<HTMLScriptElement>(`script[src="${expectedUrl}"]`);
-    expect(script).toBeTruthy();
-
-    await vi.waitFor(() => {
-      expect(init).toHaveBeenCalled();
-    });
+    expect(appendSpy).not.toHaveBeenCalled();
   });
 
-  it("defaults packageVersion when omitted", async () => {
-    const init = vi.fn();
-    class MockCexp {
-      public init = init;
-      constructor(_opts: { apiKey: string }) {
-        void _opts;
-      }
-    }
+  it("forwards identify when the vendor instance exposes it", async () => {
+    const expSec = Math.floor(Date.now() / 1000) + 7200;
+    const jwt = jwtWithExp(expSec);
+    const fetchMock = vi.fn(async () => new Response(jwt, { status: 200 }));
 
-    mockHeadAppendGamificationScript(() => {
-      (window as unknown as { cexp: typeof MockCexp }).cexp = MockCexp as unknown as typeof MockCexp;
-    });
-
-    const plugin = new GamificationPlugin();
-    plugin.init(hubCtx(), { apiKey: "key-2" });
-    plugin.onToggle(true);
-
-    await vi.waitFor(() => {
-      expect(document.querySelector(`script[src="${scriptUrlForVersion(DEFAULT_VER)}"]`)).toBeTruthy();
-    });
-  });
-
-  it("forwards track and identify when the vendor instance exposes them", async () => {
-    const track = vi.fn();
     const identify = vi.fn();
     const init = vi.fn();
 
     class MockCexp {
-      public track = track;
       public identify = identify;
       public init = init;
       constructor(_opts: { apiKey: string }) {
@@ -115,22 +87,28 @@ describe("GamificationPlugin", () => {
       (window as unknown as { cexp: typeof MockCexp }).cexp = MockCexp as unknown as typeof MockCexp;
     });
 
-    const plugin = new GamificationPlugin();
-    plugin.init(hubCtx(), { apiKey: "key-3" });
+    const plugin = new GamificationPlugin({ fetchImpl: fetchMock });
+    plugin.init(hubCtx(), {
+      clientKey: "client-key-1",
+      tokenBaseUrl: tokenBase,
+      packageVersion: DEFAULT_VER,
+    });
     plugin.onToggle(true);
 
     await vi.waitFor(() => {
       expect(init).toHaveBeenCalled();
     });
 
-    plugin.track("evt", { a: 1 });
     plugin.identify("u1", { tier: "gold" });
 
-    expect(track).toHaveBeenCalledWith("evt", { a: 1 });
     expect(identify).toHaveBeenCalledWith("u1", { tier: "gold" });
   });
 
-  it("on toggle-off removes script, calls destroy when present, and clears window.cexp", async () => {
+  it("on toggle-off removes script, calls destroy, and clears window.cexp (CDP path)", async () => {
+    const expSec = Math.floor(Date.now() / 1000) + 7200;
+    const jwt = jwtWithExp(expSec);
+    const fetchMock = vi.fn(async () => new Response(jwt, { status: 200 }));
+
     const destroy = vi.fn();
     const init = vi.fn();
 
@@ -146,8 +124,12 @@ describe("GamificationPlugin", () => {
       (window as unknown as { cexp: typeof MockCexp }).cexp = MockCexp as unknown as typeof MockCexp;
     });
 
-    const plugin = new GamificationPlugin();
-    plugin.init(hubCtx(), { apiKey: "key-4" });
+    const plugin = new GamificationPlugin({ fetchImpl: fetchMock });
+    plugin.init(hubCtx(), {
+      clientKey: "ck",
+      tokenBaseUrl: tokenBase,
+      packageVersion: DEFAULT_VER,
+    });
     plugin.onToggle(true);
 
     await vi.waitFor(() => {
@@ -166,28 +148,6 @@ describe("GamificationPlugin", () => {
     expect(destroy).toHaveBeenCalled();
     expect((window as unknown as { cexp?: unknown }).cexp).toBeUndefined();
   });
-
-  it("does not inject script when apiKey is missing", async () => {
-    const appendSpy = vi.spyOn(document.head, "appendChild");
-
-    const plugin = new GamificationPlugin();
-    plugin.init(hubCtx(), { packageVersion: DEFAULT_VER });
-    plugin.onToggle(true);
-
-    await Promise.resolve();
-
-    expect(appendSpy).not.toHaveBeenCalled();
-  });
-
-  const tokenBase = "https://staging-cexp.cads.live/gamification";
-
-  function jwtWithExp(expSec: number): string {
-    const b64url = (s: string) =>
-      btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-    return `${b64url(JSON.stringify({ alg: "none", typ: "JWT" }))}.${b64url(
-      JSON.stringify({ exp: expSec })
-    )}.sig`;
-  }
 
   it("CDP JWT: fetches JWT before script load and passes it as apiKey", async () => {
     const expSec = Math.floor(Date.now() / 1000) + 7200;
@@ -218,7 +178,7 @@ describe("GamificationPlugin", () => {
     await vi.waitFor(() => {
       expect(fetchMock).toHaveBeenCalled();
     });
-    expect(fetchMock.mock.calls[0]![0]).toBe(`${tokenBase}/sv/token`);
+    expect(fetchMock).toHaveBeenCalledWith(`${tokenBase}/sv/token`, expect.any(Object));
 
     await vi.waitFor(() => {
       expect(init).toHaveBeenCalled();

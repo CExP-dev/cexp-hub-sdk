@@ -25,7 +25,7 @@ describe("Hub plugin registry + lifecycle", () => {
     const c1: ControlConfig = {
       version: 1,
       integrations: {
-        onesignal: { enabled: false },
+        notification: { enabled: false },
         gamification: { enabled: true, packageVersion: "1.0.1-beta.9", apiKey: "k1" },
       },
     };
@@ -33,7 +33,7 @@ describe("Hub plugin registry + lifecycle", () => {
     const c2: ControlConfig = {
       version: 2,
       integrations: {
-        onesignal: { enabled: false },
+        notification: { enabled: false },
         gamification: { enabled: true, packageVersion: "1.0.1-beta.10", apiKey: "k1" },
       },
     };
@@ -69,7 +69,7 @@ describe("Hub plugin registry + lifecycle", () => {
     const base = {
       version: 1,
       integrations: {
-        onesignal: { enabled: false },
+        notification: { enabled: false },
         gamification: {
           enabled: true,
           packageVersion: "1.0.1-beta.9",
@@ -100,25 +100,25 @@ describe("Hub plugin registry + lifecycle", () => {
 
   it("keeps ctx.getToggles live after subsequent hub.setControlConfig updates", async () => {
     let getTogglesFn: (() => IntegrationToggles) | undefined;
-    const onesignalOnToggle = vi.fn();
+    const notificationOnToggle = vi.fn();
 
-    const onesignalPlugin: Plugin = {
-      name: "onesignal",
+    const notificationPlugin: Plugin = {
+      name: "notification",
       init: (ctx) => {
         // Capture the function reference during init. It must remain live and reflect later updates.
         getTogglesFn = ctx.getToggles;
       },
-      onToggle: onesignalOnToggle,
+      onToggle: notificationOnToggle,
     };
 
     const hub = new Hub({
-      pluginOverrides: { onesignal: onesignalPlugin },
+      pluginOverrides: { notification: notificationPlugin },
     });
 
     const c1: ControlConfig = {
       version: 1,
       integrations: {
-        onesignal: { enabled: false },
+        notification: { enabled: false },
         gamification: { enabled: false },
       },
     };
@@ -126,7 +126,7 @@ describe("Hub plugin registry + lifecycle", () => {
     const c2: ControlConfig = {
       version: 2,
       integrations: {
-        onesignal: { enabled: true },
+        notification: { enabled: true },
         gamification: { enabled: false },
       },
     };
@@ -135,14 +135,14 @@ describe("Hub plugin registry + lifecycle", () => {
     expect(getTogglesFn).toBeDefined();
     const fnRef = getTogglesFn!;
     expect(fnRef()).toEqual({
-      onesignal: false,
+      notification: false,
       gamification: false,
     });
 
     await hub.setControlConfig(c2);
     expect(fnRef).toBe(getTogglesFn);
     expect(fnRef()).toEqual({
-      onesignal: true,
+      notification: true,
       gamification: false,
     });
   });

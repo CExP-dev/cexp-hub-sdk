@@ -10,7 +10,7 @@ import type { ControlConfig } from "../src/config/schema";
 const expectedDefaults: ControlConfig = {
   version: 0,
   integrations: {
-    onesignal: { enabled: false },
+    notification: { enabled: false },
     gamification: { enabled: false },
   },
 };
@@ -47,13 +47,13 @@ describe("parseControlConfig schema safety", () => {
     const parsed = parseControlConfig({
       version: 3,
       integrations: {
-        onesignal: { enabled: "true" as any },
+        notification: { enabled: "true" as any },
       },
     });
 
     expect(parsed.version).toBe(3);
     expect(parsed.integrations).toEqual({
-      onesignal: { enabled: false },
+      notification: { enabled: false },
       gamification: { enabled: false },
     });
   });
@@ -61,19 +61,19 @@ describe("parseControlConfig schema safety", () => {
   it("uses safe default version when `version` is invalid (NaN/string)", () => {
     const parsedNaN = parseControlConfig({
       version: Number.NaN,
-      integrations: { onesignal: { enabled: true } },
+      integrations: { notification: { enabled: true } },
     });
     expect(parsedNaN).toEqual({
       version: 0,
       integrations: {
-        onesignal: { enabled: true },
+        notification: { enabled: true },
         gamification: { enabled: false },
       },
     });
 
     const parsedString = parseControlConfig({
       version: "bad-version" as any,
-      integrations: { onesignal: { enabled: true } },
+      integrations: { notification: { enabled: true } },
     });
     expect(parsedString).toEqual(parsedNaN);
   });
@@ -83,7 +83,7 @@ describe("parseControlConfig schema safety", () => {
       version: 7,
       someUnknownTopLevelKey: "ignored",
       integrations: {
-        onesignal: { enabled: true },
+        notification: { enabled: true },
         someUnknownIntegrationKey: { enabled: true },
       } as any,
     });
@@ -91,7 +91,7 @@ describe("parseControlConfig schema safety", () => {
     expect(parsed).toEqual({
       version: 7,
       integrations: {
-        onesignal: { enabled: true },
+        notification: { enabled: true },
         gamification: { enabled: false },
       },
     });
@@ -109,20 +109,20 @@ describe("parseControlConfig schema safety", () => {
       version: 2,
       integrations: {
         gamification: { enabled: true, packageVersion: "1.0.1-beta.10", apiKey: "k_123" },
-        onesignal: { enabled: false },
+        notification: { enabled: false },
       },
     });
   });
 
-  it("preserves onesignal.appId when present", () => {
+  it("preserves notification.appId when present", () => {
     const parsed = parseControlConfig({
       version: 3,
       integrations: {
-        onesignal: { enabled: true, appId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" },
+        notification: { enabled: true, appId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" },
       },
     });
 
-    expect(parsed.integrations.onesignal).toEqual({
+    expect(parsed.integrations.notification).toEqual({
       enabled: true,
       appId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
     });
@@ -218,7 +218,7 @@ describe("parseControlConfig schema safety", () => {
     const a: ControlConfig = {
       version: 1,
       integrations: {
-        onesignal: { enabled: false },
+        notification: { enabled: false },
         gamification: {
           enabled: true,
           clientKey: "a",

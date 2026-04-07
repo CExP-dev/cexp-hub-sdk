@@ -10,7 +10,7 @@ The browser SDK exposes a single public facade (`window.CExP`) and routes everyt
 2. `global.ts` creates `Hub`, `EventRouter`, and `ControlService`.
 3. `ControlService` fetches remote config (by `sdkId`) and polls every 5 minutes.
 4. Hub applies integration toggles and calls each plugin's `onToggle(enabled)` on changes.
-5. `EventRouter` forwards `track/page/identify/reset` to enabled plugins per routing policy.
+5. `EventRouter` forwards `identify/reset` to enabled plugins per routing policy.
 6. Each plugin owns vendor script lifecycle: load on enable, teardown + DOM/global cleanup on disable.
 
 Reference files:
@@ -28,8 +28,6 @@ All plugins implement `Plugin` from `src/plugins/types.ts`:
 - `init(ctx, config)`: one-time setup hook; store context/config references.
 - `onToggle(enabled)`: lifecycle switch; this is where lazy-load + teardown happen.
 - Optional hooks:
-  - `track(event, props)`
-  - `page(props)`
   - `identify(userId, traits?)`
   - `reset()`
   - `destroy()`
@@ -44,7 +42,7 @@ Design intent:
 ### 1) Define plugin scope and routing behavior
 
 Before coding, answer:
-- Which events should this plugin consume (`track`, `page`, `identify`, `reset`)?
+- Which events should this plugin consume (`identify`, `reset`)?
 - Should calls be dropped, queued, or forwarded when plugin is disabled?
 - Does it need user context (`userId`, `traits`) from `identify`?
 
@@ -55,7 +53,7 @@ Then map behavior into `EventRouter` rules.
 Create `src/plugins/<plugin-name>/<PluginName>Plugin.ts`.
 
 Use existing plugin patterns:
-- `src/plugins/onesignal/OneSignalPlugin.ts`
+- `src/plugins/onesignal/OneSignalPlugin.ts` (notification integration)
 - `src/plugins/gamification/GamificationPlugin.ts`
 
 Implementation requirements:
@@ -72,7 +70,7 @@ Implementation requirements:
 ### 3) Register plugin in hub and facade
 
 Current registry keys are fixed in `Hub`:
-- `onesignal`, `gamification`
+- `notification`, `gamification`
 
 To add a new plugin:
 - Update integration key union and defaults (`src/config/schema.ts`, `src/types.ts`).
@@ -167,12 +165,6 @@ export class ExamplePlugin implements Plugin {
     }
   }
 
-  track(event: string, props: Record<string, unknown>): void {
-    if (!this.active) return;
-    void event;
-    void props;
-  }
-
   identify(userId: string, traits?: Record<string, unknown>): void {
     if (!this.active) return;
     void userId;
@@ -180,7 +172,7 @@ export class ExamplePlugin implements Plugin {
   }
 
   reset(): void {
-    // optional plugin-level reset
+    if (!this.active) return;
   }
 
   private async enable(): Promise<void> {
@@ -192,4 +184,3 @@ export class ExamplePlugin implements Plugin {
   }
 }
 ```
-

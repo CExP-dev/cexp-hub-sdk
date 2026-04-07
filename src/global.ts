@@ -18,9 +18,7 @@ export function createCExP(): CExPApi {
   let controlService: ControlService | undefined;
   let firstConfigResolved = false;
   const preInitQueue: Array<
-    | { type: "track"; event: string; props: Record<string, unknown> }
-    | { type: "page"; props: Record<string, unknown> }
-    | { type: "identify"; userId: string; traits?: Record<string, unknown> }
+    { type: "identify"; userId: string; traits?: Record<string, unknown> }
   > = [];
 
   const requireInit = (methodName: string) => {
@@ -37,14 +35,6 @@ export function createCExP(): CExPApi {
     }
 
     if (!router || !hub) return;
-    if (entry.type === "track") {
-      router.track(entry.event, entry.props);
-      return;
-    }
-    if (entry.type === "page") {
-      router.page(entry.props);
-      return;
-    }
     router.identify(entry.userId, entry.traits);
   };
 
@@ -59,7 +49,7 @@ export function createCExP(): CExPApi {
 
       hub = new Hub({
         pluginOverrides: {
-          onesignal: new OneSignalPlugin(),
+          notification: new OneSignalPlugin(),
           gamification: new GamificationPlugin(),
         },
       });
@@ -109,20 +99,6 @@ export function createCExP(): CExPApi {
 
         controlService?.startPolling(300_000);
       })();
-    },
-
-    track: (event: unknown, props?: Record<string, unknown>) => {
-      requireInit("track");
-      const eventName = typeof event === "string" ? event : "unknown_event";
-      enqueueOrRun({ type: "track", event: eventName, props: props ?? {} });
-    },
-
-    page: (page?: unknown) => {
-      requireInit("page");
-      const props = (
-        typeof page === "object" && page !== null ? page : {}
-      ) as Record<string, unknown>;
-      enqueueOrRun({ type: "page", props });
     },
 
     identify: (identity: unknown, traits?: Record<string, unknown>) => {

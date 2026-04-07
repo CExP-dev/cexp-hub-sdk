@@ -83,14 +83,14 @@ export class ControlService {
    */
   getToggles():
     | {
-        onesignal: boolean;
+        notification: boolean;
         gamification: boolean;
       }
     | undefined {
     if (!this.currentConfig) return undefined;
     const { integrations } = this.currentConfig;
     return {
-      onesignal: integrations.onesignal.enabled,
+      notification: integrations.notification.enabled,
       gamification: integrations.gamification.enabled,
     };
   }

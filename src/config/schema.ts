@@ -1,10 +1,10 @@
-export type IntegrationKey = "onesignal" | "gamification";
+export type IntegrationKey = "notification" | "gamification";
 
 export interface BasicIntegrationToggleConfig {
   enabled: boolean;
 }
 
-export interface OneSignalIntegrationToggleConfig extends BasicIntegrationToggleConfig {
+export interface NotificationIntegrationToggleConfig extends BasicIntegrationToggleConfig {
   /**
    * OneSignal web app id (UUID). Required for the SDK script to load when enabled.
    */
@@ -35,7 +35,7 @@ export interface GamificationIntegrationToggleConfig extends BasicIntegrationTog
 }
 
 export interface IntegrationToggleConfigByKey {
-  onesignal: OneSignalIntegrationToggleConfig;
+  notification: NotificationIntegrationToggleConfig;
   gamification: GamificationIntegrationToggleConfig;
 }
 
@@ -44,7 +44,7 @@ export interface ControlConfig {
   integrations: IntegrationToggleConfigByKey;
 }
 
-const INTEGRATION_KEYS: IntegrationKey[] = ["onesignal", "gamification"];
+const INTEGRATION_KEYS: IntegrationKey[] = ["notification", "gamification"];
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   // Strictly require an object literal-like shape (no arrays); tolerate null-proto objects.
@@ -128,7 +128,7 @@ export function parseControlConfig(input: unknown): ControlConfig {
   const defaults: ControlConfig = {
     version: 0,
     integrations: {
-      onesignal: { enabled: false },
+      notification: { enabled: false },
       gamification: { enabled: false },
     },
   };
@@ -141,7 +141,7 @@ export function parseControlConfig(input: unknown): ControlConfig {
   const integrationsInput = isRecord(input.integrations) ? input.integrations : undefined;
 
   const integrations: ControlConfig["integrations"] = {
-    onesignal: { enabled: false },
+    notification: { enabled: false },
     gamification: { enabled: false },
   };
 
@@ -163,9 +163,9 @@ export function parseControlConfig(input: unknown): ControlConfig {
       integrations.gamification = gamification;
     } else {
       const appId = isRecord(block) ? safeNonEmptyString((block as Record<string, unknown>).appId) : undefined;
-      const onesignal: OneSignalIntegrationToggleConfig = { enabled: enabled ?? false };
-      if (appId !== undefined) onesignal.appId = appId;
-      integrations.onesignal = onesignal;
+      const notification: NotificationIntegrationToggleConfig = { enabled: enabled ?? false };
+      if (appId !== undefined) notification.appId = appId;
+      integrations.notification = notification;
     }
   }
 
@@ -197,7 +197,7 @@ export function tryParseControlConfig(input: unknown): ControlConfig | undefined
     if (!isPlainObject(integrationsInput)) return undefined;
 
     const integrations: ControlConfig["integrations"] = {
-      onesignal: { enabled: false },
+      notification: { enabled: false },
       gamification: { enabled: false },
     };
 
@@ -228,9 +228,9 @@ export function tryParseControlConfig(input: unknown): ControlConfig | undefined
         integrations.gamification = gamification;
       } else {
         const appId = safeNonEmptyString((block as Record<string, unknown>).appId);
-        const onesignal: OneSignalIntegrationToggleConfig = { enabled };
-        if (appId !== undefined) onesignal.appId = appId;
-        integrations.onesignal = onesignal;
+        const notification: NotificationIntegrationToggleConfig = { enabled };
+        if (appId !== undefined) notification.appId = appId;
+        integrations.notification = notification;
       }
     }
 
@@ -257,8 +257,8 @@ export function areControlConfigsEqual(a: ControlConfig, b: ControlConfig): bool
         return false;
       }
     } else {
-      if (a.integrations.onesignal.enabled !== b.integrations.onesignal.enabled) return false;
-      if (a.integrations.onesignal.appId !== b.integrations.onesignal.appId) return false;
+      if (a.integrations.notification.enabled !== b.integrations.notification.enabled) return false;
+      if (a.integrations.notification.appId !== b.integrations.notification.appId) return false;
     }
   }
   return true;
