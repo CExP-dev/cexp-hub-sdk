@@ -119,6 +119,34 @@ export function createCExP(): CExPApi {
       router = undefined;
       controlService = undefined;
     },
+
+    notification: {
+      identify: (identity: unknown) => {
+        requireInit("notification.identify");
+        if (typeof identity !== "string" || identity.length === 0) return;
+        if (!firstConfigResolved) return;
+        router?.identifyNotification(identity);
+      },
+      reset: () => {
+        requireInit("notification.reset");
+        if (!firstConfigResolved) return;
+        router?.resetNotification();
+      },
+    },
+
+    gamification: {
+      identify: (identity: unknown, traits?: Record<string, unknown>) => {
+        requireInit("gamification.identify");
+        if (typeof identity !== "string" || identity.length === 0) return;
+        if (!firstConfigResolved) return;
+        router?.identifyGamification(identity, traits);
+      },
+      reset: () => {
+        requireInit("gamification.reset");
+        if (!firstConfigResolved) return;
+        router?.resetGamification();
+      },
+    },
   };
 
   return api;

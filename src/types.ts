@@ -5,9 +5,26 @@ export type IntegrationToggles = {
   gamification: boolean;
 };
 
-export interface CExPApi {
-  init: (options: InitOptions) => void;
+export interface CExPNotificationApi {
+  identify: (userId: string) => void;
+  reset: () => void;
+}
+
+export interface CExPGamificationApi {
   identify: (userId: string, traits?: Record<string, unknown>) => void;
   reset: () => void;
+}
+
+export interface CExPApi {
+  // Stable lifecycle
+  init: (options: InitOptions) => void;
   version: string;
+
+  // Backwards-compatible fan-out routing (existing behavior)
+  identify: (userId: string, traits?: Record<string, unknown>) => void;
+  reset: () => void;
+
+  // Integration-owned namespaces (preferred)
+  notification: CExPNotificationApi;
+  gamification: CExPGamificationApi;
 }
