@@ -252,6 +252,7 @@ export class OneSignalPlugin implements Plugin {
         await legacy.setExternalUserId(userId);
       }
     } catch {
+      console.error("[OneSignalPlugin] login failed");
       // Best-effort; host app should not break on vendor errors.
     }
   }
@@ -269,6 +270,7 @@ export class OneSignalPlugin implements Plugin {
         await legacy.removeExternalUserId();
       }
     } catch {
+      console.error("[OneSignalPlugin] logout failed");
       // ignore
     }
   }

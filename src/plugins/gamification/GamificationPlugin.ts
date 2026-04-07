@@ -8,7 +8,7 @@ import {
 
 const SCRIPT_MARKER_ATTR = "data-cexp-gamification";
 
-const DEFAULT_PACKAGE_VERSION = "1.0.1-beta.9";
+const DEFAULT_PACKAGE_VERSION = "@1.0.1-beta.18";
 
 /** Skew before JWT `exp` when scheduling refresh (v1 “A-only”). */
 const TOKEN_REFRESH_SKEW_MS = 60_000;
@@ -75,7 +75,7 @@ function usesCdpJwt(cfg: ParsedGamificationConfig): boolean {
 }
 
 function buildGamificationScriptUrl(version: string): string {
-  return `https://cdn.jsdelivr.net/npm/cexp-gamification@${version}/dist/cexp-web-sdk.js`;
+  return `https://cdn.jsdelivr.net/npm/cexp-gamification${version}/dist/cexp-web-sdk.js`;
 }
 
 function getCexpConstructor(): CexpCtor | undefined {
