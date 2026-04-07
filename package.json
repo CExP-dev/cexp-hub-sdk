@@ -1,6 +1,6 @@
 {
   "name": "cexp-hub-sdk",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "CExP Hub browser SDK facade.",
   "type": "module",
   "scripts": {
