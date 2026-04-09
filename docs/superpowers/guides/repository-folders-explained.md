@@ -19,7 +19,7 @@ Those calls flow through the SDK like this:
    - `ControlService` fetches and polls remote config
    - `Hub` manages plugin lifecycle and toggles
    - `EventRouter` routes events to enabled plugins
-3. `src/config/schema.ts` validates/parses remote control JSON into a safe internal `ControlConfig` (`notification` + `gamification` only).
+3. `src/config/` validates/parses remote control JSON (unified `modules[]` wire format) into a safe internal `ControlConfig` (`notification` + `gamification` only).
 4. `src/plugins/*` provide the vendor behaviors (**OneSignal** as notification, **gamification**).
 
 ### Relationship diagram
@@ -37,7 +37,7 @@ flowchart LR
 
   subgraph Control["Remote control config"]
     D["`src/hub/ControlService.ts`\nfetch + poll + onUpdate"]
-    E["`src/config/schema.ts`\nparse/validate `ControlConfig`"]
+    E["`src/config/*`\nparse unified wire → `ControlConfig`"]
   end
 
   subgraph Orchestration["Orchestration"]
@@ -65,9 +65,9 @@ flowchart LR
 
 - **Role**: All runtime TypeScript for the SDK.
 - **Links**:
-  - `src/index.ts`: public ESM exports (`CExP`, `init`, `identify`, …).
+  - `src/index.ts`: public ESM exports (`CExP`, `init`, `identify`, `notification`, `gamification`, …).
   - `src/global.ts`: creates the singleton facade and connects hub/router/control/config.
-  - `src/types.ts`: public types (`CExPApi`, `InitOptions`, `IntegrationToggles`).
+  - `src/types.ts`: public types (`CExPApi`, `CExPNotificationApi`, `CExPGamificationApi`, `InitOptions`, `IntegrationToggles`).
 
 ## `src/hub/` — orchestration layer ("the brain")
 
@@ -94,6 +94,11 @@ flowchart LR
 ## `src/config/` — remote control schema & parsing
 
 - **Role**: Defines the safe internal config shape and parsing rules for remote control JSON.
+- **Key files**:
+  - `schema.ts` — `ControlConfig` type, `tryParseControlConfig`, `areControlConfigsEqual`.
+  - `unifiedControl.ts` — parser for the unified `{ version, sdkId?, modules[] }` wire shape (delegates to/from `schema.ts`).
+  - `controlParseHelpers.ts` — shared validation helpers (`isPlainObject`, `safeNonEmptyString`, `safeTokenBaseUrl`, `safePackageVersion`).
+  - `onesignalInitNormalize.ts` — normalizes OneSignal `property` fields (coerces `delay.pageViews` / `delay.timeDelay` to numbers) before `OneSignal.init`.
 - **Links**:
   - `ControlService` uses strict parsing (`tryParseControlConfig`) and equality checks to decide when to notify updates.
   - `Hub` reads `ControlConfig` and derives `IntegrationToggles`.

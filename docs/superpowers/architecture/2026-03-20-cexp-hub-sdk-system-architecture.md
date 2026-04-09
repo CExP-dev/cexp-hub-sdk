@@ -1,6 +1,8 @@
 # CExP Hub SDK — system architecture
 
-> **Current as of 2026-04:** Runtime behavior is a **two-integration** hub (**notification** via OneSignal, **gamification**) behind `window.CExP`. The public API surface is `init`, `identify`, `reset`, and `version`. **Identity (cdp.js), Snowplow, `IdentityStore`, automatic SPA history listeners, `track`, and `page`** were removed — see [../plans/2026-04-03-remove-identity-snowplow-plugins.md](../plans/2026-04-03-remove-identity-snowplow-plugins.md) and [../plans/2026-04-07-plugin-cleanup-and-notification-rename.md](../plans/2026-04-07-plugin-cleanup-and-notification-rename.md).
+> **Current as of 2026-04:** Runtime behavior is a **two-integration** hub (**notification** via OneSignal, **gamification**) behind `window.CExP`. The public API surface is `init`, `identify`, `reset`, `version`, plus **integration namespaces** `CExP.notification.*` and `CExP.gamification.*`. **Identity (cdp.js), Snowplow, `IdentityStore`, automatic SPA history listeners, `track`, and `page`** were removed — see [../plans/2026-04-03-remove-identity-snowplow-plugins.md](../plans/2026-04-03-remove-identity-snowplow-plugins.md) and [../plans/2026-04-07-plugin-cleanup-and-notification-rename.md](../plans/2026-04-07-plugin-cleanup-and-notification-rename.md).
+>
+> **Control wire format (in progress):** migrating from legacy `{ version: number, integrations }` to a **unified** `{ version: string, sdkId?, modules[] }` shape — see [../specs/2026-04-09-unified-control-config-design.md](../specs/2026-04-09-unified-control-config-design.md).
 
 The older four-plugin design (identity + Snowplow + OneSignal + gamification) is documented historically in [../plans/2026-03-20-cexp-hub-sdk.md](../plans/2026-03-20-cexp-hub-sdk.md); treat that plan as **superseded** for current product behavior.
 
@@ -14,7 +16,7 @@ Diagrams use [Mermaid](https://mermaid.js.org/); render in GitHub, VS Code (prev
 
 **Two integrations have toggles.** **Notification** (OneSignal) and **gamification** are independently togglable from the backend config. When toggled on, the vendor script is lazy-loaded and initialized. When toggled off, the plugin is destroyed and its `<script>` tag is **removed from the DOM**.
 
-There is **no** `track` or `page` on the public API. Consumers call `CExP.identify()` to associate the session with a known user and `CExP.reset()` to clear state.
+There is **no** `track` or `page` on the public API. Consumers call `CExP.identify()` to associate the session with a known user and `CExP.reset()` to clear state. Integration-specific methods are available via **`CExP.notification.identify()` / `.reset()`** and **`CExP.gamification.identify()` / `.reset()`** for targeted routing.
 
 ---
 
@@ -261,3 +263,5 @@ flowchart TB
 - Removal of identity + Snowplow + SPA stack: [../plans/2026-04-03-remove-identity-snowplow-plugins.md](../plans/2026-04-03-remove-identity-snowplow-plugins.md)
 - Plugin cleanup + notification rename: [../plans/2026-04-07-plugin-cleanup-and-notification-rename.md](../plans/2026-04-07-plugin-cleanup-and-notification-rename.md)
 - Version-management policy (hybrid): [../specs/2026-03-30-version-management-design.md](../specs/2026-03-30-version-management-design.md)
+- API namespaces: [../plans/2026-04-07-api-namespaces.md](../plans/2026-04-07-api-namespaces.md) (completed)
+- Unified control config (breaking): [../specs/2026-04-09-unified-control-config-design.md](../specs/2026-04-09-unified-control-config-design.md) (in progress)

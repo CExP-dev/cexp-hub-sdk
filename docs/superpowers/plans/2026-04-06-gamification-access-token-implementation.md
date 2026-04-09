@@ -1,5 +1,7 @@
 # Gamification CDP access token — implementation plan
 
+> **Status: COMPLETED (2026-04).** CDP JWT flow (`gamificationToken.ts`, refresh scheduling, Hub wiring) is implemented. This plan is retained as historical reference only.
+
 > **Spec (normative):** [../specs/2026-03-30-version-management-design.md](../specs/2026-03-30-version-management-design.md) — section **Gamification CDP access token**  
 > **Tracking:** Use checkbox steps (`- [ ]`) while implementing.
 

@@ -33,7 +33,7 @@ All plugins implement `Plugin` from `src/plugins/types.ts`:
   - `destroy()`
 
 Design intent:
-- `init` is called once.
+- `init` may be called **multiple times** (once on first config, then again when remote config changes for this integration while enabled). Handle repeated `init` safely.
 - `onToggle(true)` may happen multiple times over runtime; make enable idempotent.
 - `onToggle(false)` must clean up scripts, timers, listeners, and vendor globals where possible.
 
@@ -82,13 +82,14 @@ Important: `plugin.name` must exactly match the key used in hub registry.
 
 ### 4) Extend control config parsing
 
-`ControlService` currently consumes parsed toggles from `parseControlConfig`.
+`ControlService` uses `tryParseControlConfig` (unified `modules[]` wire format) from `src/config/schema.ts`.
 
 When adding a new integration:
-- Add key to `IntegrationKey`.
-- Add default toggle in parser.
-- Ensure strict parser (`tryParseControlConfig`) validates new key.
-- Keep backward compatibility: unknown fields ignored, missing fields default-safe.
+- Add key to `IntegrationKey` in `src/config/schema.ts`.
+- Add a new module `type` constant and parsing logic in `src/config/unifiedControl.ts`.
+- Add default toggle + config shape in the parser.
+- The wire format uses `modules[]` with `{ id, type, property }` entries; a module's presence means "enabled."
+- Keep defensive parsing: unknown fields ignored, missing `property` treated as `{}`.
 
 ### 5) Add/adjust tests
 
@@ -108,14 +109,14 @@ Test locations:
 - `test/<PluginName>Plugin.test.ts`
 - related router/hub tests (`test/EventRouter.test.ts`, `test/hub-*.test.ts`, `test/global-api.test.ts`)
 
-## Current Architecture Caveats (As-Is)
+## Current Architecture Behavior (As-Is)
 
 Be aware of current behavior while integrating:
-- `Hub` currently calls `plugin.init(ctx, {})` with empty config object.
-- Per-plugin remote integration config wiring is limited; many plugins rely on defaults unless further wired.
+- `Hub` calls `plugin.init(ctx, config)` with the **per-integration config** from `ControlConfig.integrations[key]` (e.g. `{ enabled: true, appId: "..." }` for notification, `{ enabled: true, packageVersion: "...", clientKey: "...", tokenBaseUrl: "..." }` for gamification).
+- When an integration's config **changes while enabled**, Hub re-initializes the plugin (`init` + `onToggle(false)` + `onToggle(true)`).
 - Pre-first-config API calls are queued in `global.ts` and flushed once first control sync resolves.
 
-Design your plugin to behave safely under these constraints.
+Design your plugin to handle repeated `init` calls safely (config refresh while active).
 
 ## Developer Checklist (Definition of Done)
 

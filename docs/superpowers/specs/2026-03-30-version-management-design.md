@@ -1,6 +1,6 @@
 # Version management — design (hybrid)
 
-**Status:** Draft for review  
+**Status:** Implemented (2026-04). Note: control config `version` is now a **string** in the unified wire format (not a number as originally described). See [2026-04-09-unified-control-config-design.md](./2026-04-09-unified-control-config-design.md) for the current wire contract.  
 **Related:** [../architecture/2026-03-20-cexp-hub-sdk-system-architecture.md](../architecture/2026-03-20-cexp-hub-sdk-system-architecture.md) (current hub); [../plans/2026-03-20-cexp-hub-sdk.md](../plans/2026-03-20-cexp-hub-sdk.md) (historical four-plugin plan); [../plans/2026-04-06-gamification-access-token-implementation.md](../plans/2026-04-06-gamification-access-token-implementation.md) (gamification token + refresh)
 
 ---

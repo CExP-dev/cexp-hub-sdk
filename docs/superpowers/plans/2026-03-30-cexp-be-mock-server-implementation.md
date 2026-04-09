@@ -1,5 +1,7 @@
 # `cexp-be` Mock Server Implementation Plan
 
+> **Partially superseded (2026-04):** This plan uses the **legacy** `{ version: number, integrations }` wire format. The SDK now expects **unified** `{ version: string, sdkId?, modules[] }` — see [../specs/2026-04-09-unified-control-config-design.md](../specs/2026-04-09-unified-control-config-design.md). The mock server response body and validation logic need updating to match.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
 > **Goal:** Create a local `cexp-be` mock server that serves the control endpoint `GET /v1/sdk-config?sdkId=...` for `cexp-hub-sdk`, including `ETag`/`If-None-Match` + `304` and reload-without-restart from a JSON file.

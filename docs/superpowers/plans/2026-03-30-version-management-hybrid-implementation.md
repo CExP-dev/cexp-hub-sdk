@@ -1,5 +1,7 @@
 # Hybrid Version Management — Implementation Plan
 
+> **Status: COMPLETED (2026-04).** `CExP.version` from `package.json`, remote gamification config knobs, and Hub re-init on config change are implemented. This plan is retained as historical reference only.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Implement a hybrid version-management workflow so the SDK stays evergreen for consumers while backend control config can safely update supported vendor integration parameters without requiring consumers to change their snippet.

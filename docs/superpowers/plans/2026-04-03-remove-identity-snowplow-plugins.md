@@ -1,5 +1,7 @@
 # Remove Identity + Snowplow Plugins Implementation Plan
 
+> **Status: COMPLETED (2026-04).** Identity and Snowplow plugins have been removed. This plan is retained as historical reference only.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use @superpowers/subagent-driven-development (recommended) or @superpowers/executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Remove the `identity` (cdp.js / `fpt_uuid`) and `snowplow` plugins and all hub wiring, types, and tests that exist only to support them, leaving **OneSignal** and **gamification** as the only integrations.

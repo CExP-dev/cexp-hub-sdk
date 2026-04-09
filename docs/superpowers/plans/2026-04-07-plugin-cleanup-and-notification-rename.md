@@ -1,5 +1,7 @@
 # Plugin Cleanup & Notification Rename Implementation Plan
 
+> **Status: COMPLETED (2026-04).** Plugin cleanup and `onesignal` → `notification` rename are done. This plan is retained as historical reference only.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Remove dead/placeholder methods from plugins, strip `track`/`page` from the public API, and rename the `onesignal` integration key to `notification` across the SDK.

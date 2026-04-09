@@ -1,5 +1,7 @@
 # API Namespaces (Integration-owned) Implementation Plan
 
+> **Status: COMPLETED (2026-04).** `CExP.notification.*` and `CExP.gamification.*` namespaces are implemented. This plan is retained as historical reference only.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Expose **integration-owned namespaces** so consumers can see which methods belong to which integration (e.g. `CExP.notification.identify(...)`), while keeping lifecycle stable and preserving top-level `identify/reset` as backwards-compatible fan-out aliases.

@@ -1,5 +1,7 @@
 # `cexp-be` mock server — control config endpoint
 
+> **Partially superseded (2026-04):** This spec describes the **legacy** `{ version: number, integrations }` wire format. The SDK now expects the **unified** `{ version: string, sdkId?, modules[] }` shape — see [2026-04-09-unified-control-config-design.md](./2026-04-09-unified-control-config-design.md). The `cexp-be` mock server should be updated to emit the unified format.
+
 **Status:** Implemented in [`cexp-be`](../../../../cexp-be) (see [`README.md`](../../../../cexp-be/README.md)); keep this spec aligned with code changes.
 
 **Related:** [`cexp-hub-sdk` `ControlService`](../src/hub/ControlService.ts) and [`ControlConfig` schema](../src/config/schema.ts)

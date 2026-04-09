@@ -43,6 +43,7 @@
       "type": "GAMIFICATION",
       "property": {
         "packageVersion": "string",
+        "apiKey": "string (optional, static key path)",
         "clientKey": "string",
         "tokenBaseUrl": "string"
       }
@@ -51,4 +52,4 @@
 }
 ```
 
-**`promptOptions.slidedown.prompts[].delay`:** `pageViews` and `timeDelay` may be JSON **numbers** or **numeric strings** from the backend; the SDK coerces them to **numbers** before calling `OneSignal.init`.
+`**promptOptions.slidedown.prompts[].delay`:** `pageViews` and `timeDelay` may be JSON **numbers** or **numeric strings** from the backend; the SDK coerces them to **numbers** before calling `OneSignal.init`.
