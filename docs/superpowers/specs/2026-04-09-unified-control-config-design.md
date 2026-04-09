@@ -51,7 +51,7 @@ Equality for ETag / `onUpdate` should compare this normalized structure (includi
 
 - Load behavior stays aligned with OneSignal Web v16 deferred init.
 - **`OneSignal.init`** receives **`appId`** (required before load, same as today) **plus** any supported options parsed from `property`.
-- **`delay.pageViews`** and **`delay.timeDelay`:** JSON **numbers** only (finite). Strings or other types are **not** accepted for these fields — omit or strip invalid values when building the object passed to **`OneSignal.init`** (exact validation behavior defined in implementation).
+- **`delay.pageViews`** and **`delay.timeDelay`:** The backend may send either a **JSON number** or a **numeric string**. The SDK **coerces** each value to a **finite number** before embedding in **`OneSignal.init`**. If coercion fails (non-numeric string, `NaN`, non-finite), **omit** that delay field (or the whole `delay` object if both invalid — implementation detail).
 
 ## Gamification (`GAMIFICATION`)
 
@@ -64,7 +64,7 @@ Equality for ETag / `onUpdate` should compare this normalized structure (includi
 
 ## Testing
 
-- Fixtures for: both modules, single module, neither module, duplicate types (**first wins**), invalid `property` on one side only, `delay.pageViews` / `delay.timeDelay` as valid numbers vs invalid types (rejected or stripped per implementation), missing `property` on a module (treated as `{}`).
+- Fixtures for: both modules, single module, neither module, duplicate types (**first wins**), invalid `property` on one side only, `delay` fields from backend as **number**, as **numeric string**, and as **invalid string** (coercion → omit), missing `property` on a module (treated as `{}`).
 
 ## Out of scope (this design)
 

@@ -24,8 +24,8 @@
                 "type": "'push' | 'category'",
                 "autoPrompt": true,
                 "delay": {
-                  "pageViews": "number",
-                  "timeDelay": "number"
+                  "pageViews": "number | string",
+                  "timeDelay": "number | string"
                 },
                 "text": {
                   "actionMessage": "string",
@@ -50,3 +50,5 @@
   ]
 }
 ```
+
+**`promptOptions.slidedown.prompts[].delay`:** `pageViews` and `timeDelay` may be JSON **numbers** or **numeric strings** from the backend; the SDK coerces them to **numbers** before calling `OneSignal.init`.
