@@ -51,7 +51,7 @@ Equality for ETag / `onUpdate` should compare this normalized structure (includi
 
 - Load behavior stays aligned with OneSignal Web v16 deferred init.
 - **`OneSignal.init`** receives **`appId`** (required before load, same as today) **plus** any supported options parsed from `property`.
-- **`delay.pageViews`** and **`delay.timeDelay`:** accept **number or string** in JSON so hosts can match OneSignal examples (numbers) while the markdown spec shows strings.
+- **`delay.pageViews`** and **`delay.timeDelay`:** JSON **numbers** only (finite). Strings or other types are **not** accepted for these fields — omit or strip invalid values when building the object passed to **`OneSignal.init`** (exact validation behavior defined in implementation).
 
 ## Gamification (`GAMIFICATION`)
 
@@ -64,7 +64,7 @@ Equality for ETag / `onUpdate` should compare this normalized structure (includi
 
 ## Testing
 
-- Fixtures for: both modules, single module, neither module, duplicate types (**first wins**), invalid `property` on one side only, `delay` as number vs string, missing `property` on a module (treated as `{}`).
+- Fixtures for: both modules, single module, neither module, duplicate types (**first wins**), invalid `property` on one side only, `delay.pageViews` / `delay.timeDelay` as valid numbers vs invalid types (rejected or stripped per implementation), missing `property` on a module (treated as `{}`).
 
 ## Out of scope (this design)
 
