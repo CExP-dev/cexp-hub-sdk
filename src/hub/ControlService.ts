@@ -46,21 +46,21 @@ export class ControlService {
       (options.sdkId
         ? `${(options.baseUrl ?? DEFAULT_CONTROL_BASE_URL).replace(
             /\/+$/,
-            ""
+            "",
           )}/v1/sdk-config?sdkId=${encodeURIComponent(options.sdkId)}`
         : undefined);
 
     // console.log("builtUrl", builtUrl);
     if (!builtUrl) {
       throw new Error(
-        "[ControlService] Provide either `controlUrl` or (`sdkId` and optional `baseUrl`)."
+        "[ControlService] Provide either `controlUrl` or (`sdkId` and optional `baseUrl`).",
       );
     }
 
     const rawFetcher = options.fetcher ?? globalThis.fetch;
     if (typeof rawFetcher !== "function") {
       throw new Error(
-        "[ControlService] No fetch implementation found (provide `fetcher`)."
+        "[ControlService] No fetch implementation found (provide `fetcher`).",
       );
     }
 

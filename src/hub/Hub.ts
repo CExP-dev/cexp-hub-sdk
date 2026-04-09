@@ -1,5 +1,9 @@
 import type { IntegrationToggles } from "../types";
-import type { ControlConfig, IntegrationKey } from "../config/schema";
+import {
+  areNotificationIntegrationConfigsEqual,
+  type ControlConfig,
+  type IntegrationKey,
+} from "../config/schema";
 import type { HubContext, Plugin } from "../plugins/types";
 
 const DEFAULT_TOGGLES: IntegrationToggles = {
@@ -48,6 +52,12 @@ export class Hub {
   private initialized = false;
   private currentToggles: IntegrationToggles | undefined;
 
+  /** Stable reference so plugins holding `ctx` from an earlier `init` still see live toggles. */
+  private readonly hubContext: HubContext = {
+    getToggles: () => this.currentToggles ?? DEFAULT_TOGGLES,
+    getUserId: () => null,
+  };
+
   constructor(options: HubOptions = {}) {
     const overrides = options.pluginOverrides ?? {};
     for (const integrationKey of PLUGIN_ORDER) {
@@ -78,7 +88,7 @@ export class Hub {
     // Keep ControlConfig-like state in sync for ctx.getToggles() consumers.
     // Note: this does NOT trigger plugin.init; only setControlConfig() does that.
     this.currentControlConfig = {
-      version: this.currentControlConfig?.version ?? 0,
+      version: this.currentControlConfig?.version ?? "0",
       integrations: {
         notification: { enabled: next.notification },
         gamification: { enabled: next.gamification },
@@ -133,7 +143,7 @@ export class Hub {
     }
 
     // Subsequent updates:
-    // - non-gamification: only onToggle when enabled flag changes
+    // - notification: same pattern as gamification for enable transitions and config-while-enabled refresh
     // - gamification:
     //   - false -> true: init then onToggle(true)
     //   - true -> true with cfg change: init then onToggle(false) then onToggle(true)
@@ -141,6 +151,33 @@ export class Hub {
     for (const integrationKey of PLUGIN_ORDER) {
       const plugin = this.plugins.get(integrationKey);
       if (!plugin) continue;
+
+      if (integrationKey === "notification") {
+        const prevN = prevControlConfig!.integrations.notification;
+        const nextN = next.integrations.notification;
+        const prevEnabled = prevN.enabled;
+        const nextEnabled = nextN.enabled;
+
+        if (prevEnabled !== nextEnabled) {
+          if (!prevEnabled && nextEnabled) {
+            await plugin.init(ctx, nextN);
+            plugin.onToggle(true);
+          } else {
+            plugin.onToggle(false);
+          }
+          continue;
+        }
+
+        if (nextEnabled) {
+          if (!areNotificationIntegrationConfigsEqual(prevN, nextN)) {
+            await plugin.init(ctx, nextN);
+            plugin.onToggle(false);
+            plugin.onToggle(true);
+          }
+        }
+
+        continue;
+      }
 
       if (integrationKey === "gamification") {
         if (!prevGamification) continue; // should not happen once initialized is true
@@ -195,12 +232,6 @@ export class Hub {
 
         continue;
       }
-
-      // Non-gamification integration
-      const prevEnabled =
-        prevControlConfig!.integrations[integrationKey].enabled;
-      const enabled = next.integrations[integrationKey].enabled;
-      if (prevEnabled !== enabled) plugin.onToggle(enabled);
     }
   }
 
@@ -209,11 +240,7 @@ export class Hub {
   }
 
   getContext(): HubContext {
-    return {
-      // Important: read toggles at call time to avoid stale closure state after `setToggles()`.
-      getToggles: () => this.currentToggles ?? DEFAULT_TOGGLES,
-      getUserId: () => null,
-    };
+    return this.hubContext;
   }
 
   private deriveTogglesFromControlConfig(

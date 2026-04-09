@@ -30,11 +30,8 @@ describe("CExP public surface", () => {
       vi.fn(async () =>
         new Response(
           JSON.stringify({
-            version: 1,
-            integrations: {
-              notification: { enabled: false },
-              gamification: { enabled: false },
-            },
+            version: "1",
+            modules: [],
           }),
           { status: 200, headers: { "content-type": "application/json", etag: "v1" } },
         ),
@@ -57,14 +54,14 @@ describe("CExP public surface", () => {
       vi.fn(async () =>
         new Response(
           JSON.stringify({
-            version: 1,
-            integrations: {
-              notification: {
-                enabled: true,
-                appId: "00000000-0000-0000-0000-000000000000",
+            version: "1",
+            modules: [
+              {
+                id: "n",
+                type: "NOTIFICATION",
+                property: { appId: "00000000-0000-0000-0000-000000000000" },
               },
-              gamification: { enabled: false },
-            },
+            ],
           }),
           { status: 200, headers: { "content-type": "application/json", etag: "v1" } },
         ),

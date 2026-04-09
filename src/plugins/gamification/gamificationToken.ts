@@ -36,7 +36,9 @@ export function decodeJwtExpSeconds(jwt: string): number | undefined {
     const pad = "=".repeat(padLen);
     const json = atob(padded + pad);
     const payload = JSON.parse(json) as { exp?: unknown };
-    return typeof payload.exp === "number" && Number.isFinite(payload.exp) ? payload.exp : undefined;
+    return typeof payload.exp === "number" && Number.isFinite(payload.exp)
+      ? payload.exp
+      : undefined;
   } catch {
     return undefined;
   }
@@ -46,7 +48,11 @@ export function decodeJwtExpSeconds(jwt: string): number | undefined {
  * Milliseconds until the next refresh: `exp` minus skew minus now, floored at 0.
  * If the token is already past `exp - skew`, returns 0 (refresh immediately).
  */
-export function msUntilRefresh(expSec: number, skewMs: number, nowMs: number): number {
+export function msUntilRefresh(
+  expSec: number,
+  skewMs: number,
+  nowMs: number
+): number {
   return Math.max(0, expSec * 1000 - skewMs - nowMs);
 }
 

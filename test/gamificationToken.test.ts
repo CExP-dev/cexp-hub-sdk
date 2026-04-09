@@ -32,8 +32,12 @@ describe("gamificationToken", () => {
 
   it("normalizeTokenResponseBody accepts raw JWT or JSON wrappers", () => {
     expect(normalizeTokenResponseBody("  abc.def.ghi  ")).toBe("abc.def.ghi");
-    expect(normalizeTokenResponseBody('{"token":"abc.def.ghi"}')).toBe("abc.def.ghi");
-    expect(normalizeTokenResponseBody('{"access_token":"abc.def.ghi"}')).toBe("abc.def.ghi");
+    expect(normalizeTokenResponseBody('{"token":"abc.def.ghi"}')).toBe(
+      "abc.def.ghi"
+    );
+    expect(normalizeTokenResponseBody('{"access_token":"abc.def.ghi"}')).toBe(
+      "abc.def.ghi"
+    );
     expect(normalizeTokenResponseBody("")).toBe("");
   });
 

@@ -72,6 +72,45 @@ describe("OneSignalPlugin", () => {
     expect(mockOs.init).toHaveBeenCalledWith({ appId: "app-123" });
   });
 
+  it("passes normalized numeric delay fields to init when backend sends strings", async () => {
+    const appendSpy = mockHeadAppendChildWithScriptLoad();
+
+    const plugin = new OneSignalPlugin();
+    plugin.init(hubCtx(), {
+      appId: "app-delay",
+      promptOptions: {
+        slidedown: {
+          prompts: [{ delay: { pageViews: "1", timeDelay: "5" } }],
+        },
+      },
+    });
+
+    plugin.onToggle(true);
+
+    await vi.waitFor(() => {
+      expect(appendSpy).toHaveBeenCalled();
+    });
+
+    const mockOs = {
+      init: vi.fn().mockResolvedValue(undefined),
+      login: vi.fn().mockResolvedValue(undefined),
+      logout: vi.fn().mockResolvedValue(undefined),
+    };
+
+    await drainOneSignalDeferred(mockOs);
+
+    expect(mockOs.init).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appId: "app-delay",
+        promptOptions: {
+          slidedown: {
+            prompts: [{ delay: { pageViews: 1, timeDelay: 5 } }],
+          },
+        },
+      }),
+    );
+  });
+
   it("calls login when identify runs after init", async () => {
     mockHeadAppendChildWithScriptLoad();
 

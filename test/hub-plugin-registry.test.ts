@@ -6,6 +6,48 @@ import type { IntegrationToggles } from "../src/types";
 import type { Plugin } from "../src/plugins/types";
 
 describe("Hub plugin registry + lifecycle", () => {
+  it("re-inits notification when enabled stays true and notification config changes", async () => {
+    const init = vi.fn();
+    const onToggle = vi.fn();
+
+    const notificationPlugin: Plugin = {
+      name: "notification",
+      init: (_ctx, config) => {
+        init(config);
+      },
+      onToggle,
+    };
+
+    const hub = new Hub({
+      pluginOverrides: { notification: notificationPlugin },
+    });
+
+    const c1: ControlConfig = {
+      version: "1",
+      integrations: {
+        notification: { enabled: true, appId: "aaaaaaaa-bbbb-cccc-dddd-111111111111" },
+        gamification: { enabled: false },
+      },
+    };
+
+    const c2: ControlConfig = {
+      version: "2",
+      integrations: {
+        notification: { enabled: true, appId: "aaaaaaaa-bbbb-cccc-dddd-222222222222" },
+        gamification: { enabled: false },
+      },
+    };
+
+    await hub.setControlConfig(c1);
+    await hub.setControlConfig(c2);
+
+    expect(init.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(init.mock.calls[0]![0]).toMatchObject(c1.integrations.notification);
+    expect(init.mock.calls[1]![0]).toMatchObject(c2.integrations.notification);
+
+    expect(onToggle.mock.calls.map((c) => c[0])).toEqual([true, false, true]);
+  });
+
   it("passes per-integration config to plugin.init and re-inits gamification on config change", async () => {
     const init = vi.fn();
     const onToggle = vi.fn();
@@ -23,7 +65,7 @@ describe("Hub plugin registry + lifecycle", () => {
     });
 
     const c1: ControlConfig = {
-      version: 1,
+      version: "1",
       integrations: {
         notification: { enabled: false },
         gamification: { enabled: true, packageVersion: "1.0.1-beta.9", apiKey: "k1" },
@@ -31,7 +73,7 @@ describe("Hub plugin registry + lifecycle", () => {
     };
 
     const c2: ControlConfig = {
-      version: 2,
+      version: "2",
       integrations: {
         notification: { enabled: false },
         gamification: { enabled: true, packageVersion: "1.0.1-beta.10", apiKey: "k1" },
@@ -67,7 +109,7 @@ describe("Hub plugin registry + lifecycle", () => {
     });
 
     const base = {
-      version: 1,
+      version: "1",
       integrations: {
         notification: { enabled: false },
         gamification: {
@@ -81,7 +123,7 @@ describe("Hub plugin registry + lifecycle", () => {
 
     const tokenUrlChanged: ControlConfig = {
       ...base,
-      version: 2,
+      version: "2",
       integrations: {
         ...base.integrations,
         gamification: {
@@ -116,7 +158,7 @@ describe("Hub plugin registry + lifecycle", () => {
     });
 
     const c1: ControlConfig = {
-      version: 1,
+      version: "1",
       integrations: {
         notification: { enabled: false },
         gamification: { enabled: false },
@@ -124,7 +166,7 @@ describe("Hub plugin registry + lifecycle", () => {
     };
 
     const c2: ControlConfig = {
-      version: 2,
+      version: "2",
       integrations: {
         notification: { enabled: true },
         gamification: { enabled: false },
@@ -140,8 +182,13 @@ describe("Hub plugin registry + lifecycle", () => {
     });
 
     await hub.setControlConfig(c2);
-    expect(fnRef).toBe(getTogglesFn);
+    // Second `init` may run when an integration flips to enabled; `getToggles` identity can change
+    // but any captured getter must still reflect live hub toggles.
     expect(fnRef()).toEqual({
+      notification: true,
+      gamification: false,
+    });
+    expect(getTogglesFn!()).toEqual({
       notification: true,
       gamification: false,
     });

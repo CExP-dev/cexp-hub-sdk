@@ -3,20 +3,26 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { ControlService } from "../src/hub/ControlService";
 import type { ControlConfig } from "../src/config/schema";
 
+/** Unified control wire: `version` + `modules[]` with NOTIFICATION / GAMIFICATION. */
 const makeControlBody = (toggles: {
   notification?: boolean;
   gamification?: boolean;
-  version?: number;
+  version?: number | string;
 }) => {
-  const integrations: Record<string, { enabled: boolean }> = {};
-  if (typeof toggles.notification === "boolean") integrations.notification = { enabled: toggles.notification };
-  if (typeof toggles.gamification === "boolean")
-    integrations.gamification = { enabled: toggles.gamification };
-
-  return {
-    version: typeof toggles.version === "number" ? toggles.version : 1,
-    integrations,
-  };
+  const version =
+    typeof toggles.version === "number"
+      ? String(toggles.version)
+      : toggles.version !== undefined
+        ? String(toggles.version)
+        : "1";
+  const modules: Array<Record<string, unknown>> = [];
+  if (toggles.notification === true) {
+    modules.push({ id: "n", type: "NOTIFICATION", property: {} });
+  }
+  if (toggles.gamification === true) {
+    modules.push({ id: "g", type: "GAMIFICATION", property: {} });
+  }
+  return { version, modules };
 };
 
 const mockFetchResponse = (args: {
@@ -63,7 +69,7 @@ describe("ControlService", () => {
   it("keeps previous state on 304 (no body) and updates stored ETag", async () => {
     const firstBody = makeControlBody({ version: 10, notification: true });
     const parsedFirst: ControlConfig = {
-      version: 10,
+      version: "10",
       integrations: {
         notification: { enabled: true },
         gamification: { enabled: false },
@@ -156,21 +162,78 @@ describe("ControlService", () => {
     });
   });
 
+  it("parses partial success: invalid NOTIFICATION property disables only notification; gamification still applies", async () => {
+    const body = {
+      version: "3",
+      modules: [
+        { id: "n", type: "NOTIFICATION", property: "not-a-plain-object" },
+        {
+          id: "g",
+          type: "GAMIFICATION",
+          property: { packageVersion: "1.0.1-beta.1", apiKey: "k1" },
+        },
+      ],
+    };
+
+    fetchMock.mockResolvedValueOnce(mockFetchResponse({ status: 200, etag: '"v1"', body }) as any);
+
+    const svc = new ControlService({ controlUrl, onUpdate: updateSpy });
+    await svc.syncOnce();
+
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+    expect(svc.getToggles()).toEqual({
+      notification: false,
+      gamification: true,
+    });
+    expect(svc.getConfig()?.version).toBe("3");
+  });
+
+  it("parses partial success: invalid GAMIFICATION property disables only gamification", async () => {
+    const body = {
+      version: "4",
+      modules: [
+        {
+          id: "n",
+          type: "NOTIFICATION",
+          property: { appId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" },
+        },
+        { id: "g", type: "GAMIFICATION", property: null },
+      ],
+    };
+
+    fetchMock.mockResolvedValueOnce(mockFetchResponse({ status: 200, etag: '"v1"', body }) as any);
+
+    const svc = new ControlService({ controlUrl, onUpdate: updateSpy });
+    await svc.syncOnce();
+
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+    expect(svc.getToggles()).toEqual({
+      notification: true,
+      gamification: false,
+    });
+  });
+
   it("calls onUpdate when integration config changes but enabled toggles stay the same", async () => {
     const body1 = {
-      version: 1,
-      integrations: {
-        gamification: { enabled: true, packageVersion: "1.0.1-beta.9", apiKey: "k1" },
-        notification: { enabled: false },
-      },
+      version: "1",
+      modules: [
+        {
+          id: "g",
+          type: "GAMIFICATION",
+          property: { packageVersion: "1.0.1-beta.9", apiKey: "k1" },
+        },
+      ],
     };
 
     const body2 = {
-      version: 1,
-      integrations: {
-        gamification: { enabled: true, packageVersion: "1.0.1-beta.10", apiKey: "k1" },
-        notification: { enabled: false },
-      },
+      version: "1",
+      modules: [
+        {
+          id: "g",
+          type: "GAMIFICATION",
+          property: { packageVersion: "1.0.1-beta.10", apiKey: "k1" },
+        },
+      ],
     };
 
     fetchMock.mockResolvedValueOnce(
@@ -191,7 +254,7 @@ describe("ControlService", () => {
   it("keeps previous state on non-200 response and does not call onUpdate", async () => {
     const firstBody = makeControlBody({ version: 10, notification: true });
     const parsedFirst: ControlConfig = {
-      version: 10,
+      version: "10",
       integrations: {
         notification: { enabled: true },
         gamification: { enabled: false },
@@ -230,7 +293,7 @@ describe("ControlService", () => {
   it("keeps previous state when res.json throws on 200 and does not call onUpdate", async () => {
     const firstBody = makeControlBody({ version: 10, notification: true });
     const parsedFirst: ControlConfig = {
-      version: 10,
+      version: "10",
       integrations: {
         notification: { enabled: true },
         gamification: { enabled: false },
@@ -262,7 +325,7 @@ describe("ControlService", () => {
   it("keeps previous state when res.json returns invalid JSON on 200 and does not call onUpdate", async () => {
     const firstBody = makeControlBody({ version: 10, notification: true });
     const parsedFirst: ControlConfig = {
-      version: 10,
+      version: "10",
       integrations: {
         notification: { enabled: true },
         gamification: { enabled: false },
@@ -301,7 +364,7 @@ describe("ControlService", () => {
     expect(c2).toEqual(parsedFirst);
     expect(updateSpy).toHaveBeenCalledTimes(1);
 
-    // Strict parsing failed on the second response, but we should still persist the new ETag
+    // Root payload invalid on the second response (no `modules` array), but we should still persist the new ETag
     // and use it in the next conditional request.
     const c3 = await svc.syncOnce();
     expect(c3).toEqual(parsedFirst);
@@ -312,10 +375,10 @@ describe("ControlService", () => {
     expect(thirdInit.headers["If-None-Match"]).toBe('"v2"');
   });
 
-  it("keeps previous state on 200 with missing integrations and does not call onUpdate", async () => {
+  it("keeps previous state on 200 with missing `modules` array and does not call onUpdate", async () => {
     const firstBody = makeControlBody({ version: 10, notification: true });
     const parsedFirst: ControlConfig = {
-      version: 10,
+      version: "10",
       integrations: {
         notification: { enabled: true },
         gamification: { enabled: false },
@@ -323,11 +386,11 @@ describe("ControlService", () => {
     };
 
     const res200 = mockFetchResponse({ status: 200, etag: '"v1"', body: firstBody });
-    const res200MissingIntegrations = mockFetchResponse({
+    const res200MissingModules = mockFetchResponse({
       status: 200,
       etag: '"v2"',
-      body: { version: 11 }, // missing `integrations`
-      jsonImpl: async () => ({ version: 11 }),
+      body: { version: "11" },
+      jsonImpl: async () => ({ version: "11" }),
     });
 
     const res304Json = vi.fn(async () => ({ shouldNotBeParsed: true }));
@@ -343,7 +406,7 @@ describe("ControlService", () => {
     };
 
     fetchMock.mockResolvedValueOnce(res200 as any);
-    fetchMock.mockResolvedValueOnce(res200MissingIntegrations as any);
+    fetchMock.mockResolvedValueOnce(res200MissingModules as any);
     fetchMock.mockResolvedValueOnce(res304 as any);
 
     const svc = new ControlService({ controlUrl, onUpdate: updateSpy });
@@ -365,10 +428,10 @@ describe("ControlService", () => {
     expect(res304Json).not.toHaveBeenCalled();
   });
 
-  it("keeps previous state on 200 with non-boolean enabled integration and does not call onUpdate", async () => {
+  it("keeps previous state on 200 with invalid modules shape and does not call onUpdate", async () => {
     const firstBody = makeControlBody({ version: 10, notification: true });
     const parsedFirst: ControlConfig = {
-      version: 10,
+      version: "10",
       integrations: {
         notification: { enabled: true },
         gamification: { enabled: false },
@@ -380,16 +443,12 @@ describe("ControlService", () => {
       status: 200,
       etag: '"v2"',
       body: {
-        version: 11,
-        integrations: {
-          notification: { enabled: "not-a-boolean" },
-        },
+        version: "11",
+        modules: "not-an-array",
       },
       jsonImpl: async () => ({
-        version: 11,
-        integrations: {
-          notification: { enabled: "not-a-boolean" },
-        },
+        version: "11",
+        modules: "not-an-array",
       }),
     });
 

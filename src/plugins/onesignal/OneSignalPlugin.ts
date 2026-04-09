@@ -1,3 +1,4 @@
+import { normalizeNotificationPropertyForInit } from "../../config/onesignalInitNormalize";
 import type { HubContext, Plugin } from "../types";
 
 const ONESIGNAL_SCRIPT_URL =
@@ -11,7 +12,7 @@ export type OneSignalIntegrationConfig = {
 };
 
 type OneSignalLike = {
-  init: (opts: { appId: string }) => Promise<void> | void;
+  init: (opts: Record<string, unknown> & { appId: string }) => Promise<void> | void;
   login?: (externalId: string) => Promise<void> | void;
   logout?: () => Promise<void> | void;
 };
@@ -24,13 +25,25 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseOneSignalConfig(
-  config: unknown,
-): Required<Pick<OneSignalIntegrationConfig, "appId">> {
-  const c = isPlainObject(config) ? config : {};
-  const appId =
-    typeof c.appId === "string" && c.appId.length > 0 ? c.appId : "";
-  return { appId };
+function safeNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const t = value.trim();
+  return t.length > 0 ? t : undefined;
+}
+
+/**
+ * Builds normalized OneSignal `init` options from hub/remote notification config.
+ * `appId` on the raw config wins over any duplicate in `property`.
+ */
+function parseOneSignalConfig(config: unknown): {
+  appId: string;
+  initOptions: Record<string, unknown>;
+} {
+  const raw = isPlainObject(config) ? config : {};
+  const appId = safeNonEmptyString(raw.appId) ?? "";
+  const normalized = normalizeNotificationPropertyForInit(raw);
+  const { appId: _ignored, ...rest } = normalized;
+  return { appId, initOptions: rest };
 }
 
 function getOneSignalDeferredQueue(): OneSignalDeferredQueue {
@@ -50,7 +63,7 @@ function ensureOneSignalDeferredBootstrapInline(): void {
   if (typeof document === "undefined") return;
 
   const existing = document.querySelector<HTMLScriptElement>(
-    `script[${SCRIPT_INLINE_MARKER_ATTR}="true"]`,
+    `script[${SCRIPT_INLINE_MARKER_ATTR}="true"]`
   );
   if (existing) return;
 
@@ -68,7 +81,7 @@ function ensureOneSignalScriptLoaded(): Promise<void> {
   }
 
   const existing = document.querySelector<HTMLScriptElement>(
-    `script[src="${ONESIGNAL_SCRIPT_URL}"]`,
+    `script[src="${ONESIGNAL_SCRIPT_URL}"]`
   );
   if (existing?.getAttribute(SCRIPT_MARKER_ATTR) === "true") {
     return Promise.resolve();
@@ -82,7 +95,7 @@ function ensureOneSignalScriptLoaded(): Promise<void> {
           resolve();
         } else {
           reject(
-            new Error("[OneSignalPlugin] OneSignal SDK script failed to load"),
+            new Error("[OneSignalPlugin] OneSignal SDK script failed to load")
           );
         }
       };
@@ -104,7 +117,7 @@ function ensureOneSignalScriptLoaded(): Promise<void> {
       } else {
         script.remove();
         reject(
-          new Error("[OneSignalPlugin] OneSignal SDK script failed to load"),
+          new Error("[OneSignalPlugin] OneSignal SDK script failed to load")
         );
       }
     };
@@ -176,7 +189,9 @@ export class OneSignalPlugin implements Plugin {
     // Queue init before loading the SDK so the deferred queue is drained on startup.
     getOneSignalDeferredQueue().push(async (OneSignal: OneSignalLike) => {
       if (!this.active) return;
-      await OneSignal.init({ appId: this.cfg.appId });
+      const { appId, initOptions } = this.cfg;
+      await OneSignal.init({ ...initOptions, appId });
+
       if (!this.active) return;
 
       this.oneSignal = OneSignal;
@@ -208,12 +223,12 @@ export class OneSignalPlugin implements Plugin {
     if (typeof document !== "undefined") {
       document
         .querySelectorAll<HTMLScriptElement>(
-          `script[${SCRIPT_INLINE_MARKER_ATTR}="true"]`,
+          `script[${SCRIPT_INLINE_MARKER_ATTR}="true"]`
         )
         .forEach((el) => el.remove());
       document
         .querySelectorAll<HTMLScriptElement>(
-          `script[src="${ONESIGNAL_SCRIPT_URL}"]`,
+          `script[src="${ONESIGNAL_SCRIPT_URL}"]`
         )
         .forEach((el) => el.remove());
     }
@@ -237,7 +252,7 @@ export class OneSignalPlugin implements Plugin {
 
   private async applyLogin(
     oneSignal: OneSignalLike,
-    userId: string,
+    userId: string
   ): Promise<void> {
     try {
       if (typeof oneSignal.login === "function") {

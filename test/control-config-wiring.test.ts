@@ -5,6 +5,7 @@ import { createCExP } from "../src/global";
 /** Substring of the jsDelivr URL from `GamificationPlugin` default package version (`@1.0.1-beta.18`). */
 const EXPECTED_GAMIFICATION_SCRIPT_SUBSTRING = "cexp-gamification@1.0.1-beta.18";
 
+/** Control endpoint body uses unified wire shape (`version`, `modules[]`). */
 const tokenBase = "https://staging-cexp.cads.live/gamification";
 
 function jwtWithExp(expSec: number): string {
@@ -45,15 +46,17 @@ describe("ControlConfig integration wiring", () => {
         }
         return new Response(
           JSON.stringify({
-            version: 1,
-            integrations: {
-              notification: { enabled: false },
-              gamification: {
-                enabled: true,
-                clientKey: "ck-wiring-test",
-                tokenBaseUrl: tokenBase,
+            version: "1",
+            modules: [
+              {
+                id: "g",
+                type: "GAMIFICATION",
+                property: {
+                  clientKey: "ck-wiring-test",
+                  tokenBaseUrl: tokenBase,
+                },
               },
-            },
+            ],
           }),
           {
             status: 200,
