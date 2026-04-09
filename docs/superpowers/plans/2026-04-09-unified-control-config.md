@@ -116,7 +116,7 @@ describe("normalizeNotificationPropertyForInit", () => {
 });
 ```
 
-- [ ] **Step 2:** Run `npm run test -- --run tests/onesignalInitNormalize.test.ts` — FAIL (module missing).
+- [ ] **Step 2:** Run `npm run test -- --run test/onesignalInitNormalize.test.ts` — FAIL (module missing).
 
 - [ ] **Step 3:** Implement `coerceNumericDelayValue(value: unknown): number | undefined` (finite number pass-through; string trimmed → `Number()` → finite check).
 
